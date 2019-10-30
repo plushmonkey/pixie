@@ -1,5 +1,7 @@
 #include "pxe_socket.h"
 
+#include "pxe_alloc.h"
+
 #include <stdio.h>
 
 #define PXE_INVALID_SOCKET (socket_handle)(~0)
@@ -76,6 +78,63 @@ void pxe_socket_disconnect(pxe_socket* socket) {
   }
 }
 
+bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
+  struct addrinfo hint = {0}, *result;
+
+  hint.ai_family = AF_INET;
+  hint.ai_socktype = SOCK_STREAM;
+  hint.ai_protocol = IPPROTO_TCP;
+
+  sock->handle = socket(hint.ai_family, hint.ai_socktype, hint.ai_protocol);
+
+  if (sock->handle < 0) {
+    return 0;
+  }
+
+  char service[32];
+
+  sprintf_s(service, array_size(service), "%d", port);
+
+  if (getaddrinfo(local_host, service, &hint, &result) != 0) {
+    return 0;
+  }
+
+  if (bind(sock->handle, result->ai_addr, (int)result->ai_addrlen) != 0) {
+    freeaddrinfo(result);
+    return 0;
+  }
+
+  freeaddrinfo(result);
+
+  if (listen(sock->handle, 20) != 0) {
+    return 0;
+  }
+
+  sock->state = PXE_SOCKET_STATE_LISTENING;
+
+  return 1;
+}
+
+bool32 pxe_socket_accept(pxe_socket* socket, pxe_socket* result) {
+  struct sockaddr_in their_addr;
+
+  int addr_size = (int)sizeof(their_addr);
+
+  pxe_socket_handle new_fd =
+      accept(socket->handle, (struct sockaddr*)&their_addr, &addr_size);
+
+  if (new_fd == SOCKET_ERROR) {
+    return 0;
+  }
+
+  result->endpoint = their_addr;
+  result->handle = new_fd;
+  result->port = 0;
+  result->state = PXE_SOCKET_STATE_CONNECTED;
+
+  return 1;
+}
+
 size_t pxe_socket_send(pxe_socket* socket, const char* data, size_t size) {
   if (socket->state != PXE_SOCKET_STATE_CONNECTED) {
     return 0;
@@ -102,6 +161,39 @@ size_t pxe_socket_send(pxe_socket* socket, const char* data, size_t size) {
   }
 
   return total_sent;
+}
+
+size_t pxe_socket_send_chain(pxe_socket* socket, struct pxe_memory_arena* arena,
+                             pxe_buffer_chain* chain) {
+#ifdef _WIN32
+  WSABUF* wsa_buffers = pxe_arena_push_type(arena, WSABUF);
+  WSABUF* current_buf = wsa_buffers;
+  size_t num_buffers = 0;
+
+  do {
+    current_buf->buf = (char*)chain->buffer->data;
+    current_buf->len = (ULONG)chain->buffer->size;
+
+    ++num_buffers;
+
+    current_buf = pxe_arena_push_type(arena, WSABUF);
+
+    chain = chain->next;
+  } while (chain);
+
+  size_t sent = 0;
+
+  if (WSASend(socket->handle, wsa_buffers, (DWORD)num_buffers, (DWORD*)&sent, 0,
+              NULL, NULL) != 0) {
+    int err = pxe_get_error_code();
+    fprintf(stderr, "Error using WSASend: %d\n", err);
+  }
+
+  return sent;
+#else
+  fprintf(stderr, "Not implemented");
+  return 0;
+#endif
 }
 
 size_t pxe_socket_receive(pxe_socket* socket, char* data, size_t size) {
