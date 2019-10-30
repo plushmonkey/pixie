@@ -1,0 +1,14 @@
+Debug
+Release
+build
+*.opensdf
+*.sdf
+*.suo
+lib
+*.so
+*.o
+.vs
+*.sln
+*.vcx*
+x64
+pixie.exe
