@@ -20,45 +20,50 @@ size_t write_string(char* dest, const char* src, size_t len) {
   return varint_size + len;
 }
 
-void send_packet(pxe_socket* socket, int packet_id, char* dest, const char* src,
-                 size_t size) {
+void send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
+                 const char* src, size_t size) {
   size_t id_size = pxe_varint_size(packet_id);
+  size_t length_size = pxe_varint_size(size + id_size);
+  char* pkt = pxe_arena_alloc(arena, length_size + id_size + size);
+
   size_t index = 0;
 
-  index += pxe_varint_write(size + id_size, dest + index);
-  index += pxe_varint_write(packet_id, dest + index);
+  index += pxe_varint_write(size + id_size, pkt + index);
+  index += pxe_varint_write(packet_id, pkt + index);
 
-  char* write = dest + index;
+  char* payload = pkt + index;
 
   for (size_t i = 0; i < size; ++i) {
-    write[i] = src[i];
+    payload[i] = src[i];
   }
 
   index += size;
 
-  pxe_socket_send(socket, dest, index);
+  pxe_socket_send(socket, pkt, index);
 }
 
-void test_handshake(pxe_socket* socket) {
-  char buffer[1024];
-  size_t index = 0;
-
-  index += pxe_varint_write(498, buffer);
-
-  const char* hostname = "localhost";
+void send_handshake(pxe_socket* socket, pxe_memory_arena* arena,
+                    const char* hostname, int protocol_version,
+                    int next_state) {
   size_t host_len = strlen(hostname);
 
-  char* dest = buffer + index;
+  // buffer_size = protocol version + host_len + host + port + state
+  size_t buffer_size = pxe_varint_size(protocol_version) +
+                       pxe_varint_size(host_len) + host_len + 2 +
+                       pxe_varint_size(next_state);
+
+  char* buffer = pxe_arena_alloc(arena, buffer_size);
+
+  size_t index = pxe_varint_write(protocol_version, buffer);
   index += write_string(buffer + index, hostname, host_len);
 
-  // 0x63DD
-  buffer[index++] = 0xDD;
-  buffer[index++] = 0x63;
+  // append port
+  buffer[index++] = socket->port & 0xFF;
+  buffer[index++] = (socket->port & 0xFF00) >> 8;
 
-  index += pxe_varint_write(1, buffer + index);
+  index += pxe_varint_write(next_state, buffer + index);
 
-  char write_buffer[2048];
-  send_packet(socket, 0, write_buffer, buffer, index);
+  send_packet(socket, arena, 0, buffer, index);
 }
 
 int main(int argc, char* argv[]) {
@@ -89,23 +94,35 @@ int main(int argc, char* argv[]) {
   printf("Connected to %hhu.%hhu.%hhu.%hhu:%hu\n", bytes[0], bytes[1], bytes[2],
          bytes[3], socket.port);
 
-  test_handshake(&socket);
+  send_handshake(&socket, &trans_arena, "localhost", 498, 1);
 
-  char write_buffer[2048];
+  // Send request packet after switching to status protocol state.
+  send_packet(&socket, &trans_arena, 0, NULL, 0);
 
-  send_packet(&socket, 0, write_buffer, NULL, 0);
+  const int read_buffer_size = 1024;
 
-  char buffer[1024];
+  fd_set read_set = {0};
+  struct timeval timeout = {0};
+
   while (socket.state == PXE_SOCKET_STATE_CONNECTED) {
-    size_t result = pxe_socket_receive(&socket, buffer, array_size(buffer));
+    FD_SET(socket.handle, &read_set);
 
-    if (result != 0) {
-      for (size_t i = 0; i < result; ++i) {
-        printf("%c", buffer[i]);
+    int fd_count = select(0, &read_set, NULL, NULL, &timeout);
+
+    if (fd_count > 0) {
+      char* buffer = pxe_arena_alloc(&trans_arena, read_buffer_size);
+      size_t result = pxe_socket_receive(&socket, buffer, read_buffer_size);
+
+      if (result != 0) {
+        for (size_t i = 0; i < result; ++i) {
+          printf("%c", buffer[i]);
+        }
+
+        printf("\n");
+        fflush(stdout);
       }
 
-      printf("\n");
-      fflush(stdout);
+      pxe_arena_reset(&trans_arena);
     }
   }
 
@@ -114,5 +131,6 @@ int main(int argc, char* argv[]) {
   if (socket.state == PXE_SOCKET_STATE_ERROR) {
     printf("socket errno: %d\n", socket.error_code);
   }
+
   return 0;
 }

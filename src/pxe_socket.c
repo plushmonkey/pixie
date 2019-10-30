@@ -40,7 +40,7 @@ bool32 pxe_socket_connect(pxe_socket* sock, const char* server, u16 port) {
   }
 
   char service[10] = {0};
-  
+
   sprintf_s(service, array_size(service), "%d", port);
 
   if (getaddrinfo(server, service, &hint, &result) != 0) {
@@ -53,7 +53,7 @@ bool32 pxe_socket_connect(pxe_socket* sock, const char* server, u16 port) {
     struct sockaddr_in* sockaddr = (struct sockaddr_in*)ptr->ai_addr;
 
     if (connect(sock->handle, (struct sockaddr*)sockaddr,
-                  sizeof(struct sockaddr_in)) == 0) {
+                sizeof(struct sockaddr_in)) == 0) {
       sock->endpoint = *sockaddr;
       break;
     }
@@ -84,7 +84,8 @@ size_t pxe_socket_send(pxe_socket* socket, const char* data, size_t size) {
   size_t total_sent = 0;
 
   while (total_sent < size) {
-    int current_sent = send(socket->handle, data + total_sent, (int)(size - total_sent), 0);
+    int current_sent =
+        send(socket->handle, data + total_sent, (int)(size - total_sent), 0);
 
     if (current_sent <= 0) {
       if (current_sent == SOCKET_ERROR) {
@@ -113,9 +114,12 @@ size_t pxe_socket_receive(pxe_socket* socket, char* data, size_t size) {
       return 0;
     }
 
-    socket->error_code = err;
     pxe_socket_disconnect(socket);
-    socket->state = PXE_SOCKET_STATE_ERROR;
+
+    if (err != 0) {
+      socket->error_code = err;
+      socket->state = PXE_SOCKET_STATE_ERROR;
+    }
 
     return 0;
   }
