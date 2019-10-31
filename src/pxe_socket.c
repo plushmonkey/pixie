@@ -35,9 +35,9 @@ bool32 pxe_socket_connect(pxe_socket* sock, const char* server, u16 port) {
   hint.ai_socktype = SOCK_STREAM;
   hint.ai_protocol = IPPROTO_TCP;
 
-  sock->handle = socket(hint.ai_family, hint.ai_socktype, hint.ai_protocol);
+  sock->fd = socket(hint.ai_family, hint.ai_socktype, hint.ai_protocol);
 
-  if (sock->handle < 0) {
+  if (sock->fd < 0) {
     return 0;
   }
 
@@ -54,7 +54,7 @@ bool32 pxe_socket_connect(pxe_socket* sock, const char* server, u16 port) {
   for (ptr = result; ptr != NULL; ptr = ptr->ai_next) {
     struct sockaddr_in* sockaddr = (struct sockaddr_in*)ptr->ai_addr;
 
-    if (connect(sock->handle, (struct sockaddr*)sockaddr,
+    if (connect(sock->fd, (struct sockaddr*)sockaddr,
                 sizeof(struct sockaddr_in)) == 0) {
       sock->endpoint = *sockaddr;
       break;
@@ -74,7 +74,8 @@ bool32 pxe_socket_connect(pxe_socket* sock, const char* server, u16 port) {
 
 void pxe_socket_disconnect(pxe_socket* socket) {
   if (socket->state == PXE_SOCKET_STATE_CONNECTED) {
-    closesocket(socket->handle);
+    closesocket(socket->fd);
+    socket->state = PXE_SOCKET_STATE_DISCONNECTED;
   }
 }
 
@@ -85,9 +86,9 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
   hint.ai_socktype = SOCK_STREAM;
   hint.ai_protocol = IPPROTO_TCP;
 
-  sock->handle = socket(hint.ai_family, hint.ai_socktype, hint.ai_protocol);
+  sock->fd = socket(hint.ai_family, hint.ai_socktype, hint.ai_protocol);
 
-  if (sock->handle < 0) {
+  if (sock->fd < 0) {
     return 0;
   }
 
@@ -99,14 +100,14 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
     return 0;
   }
 
-  if (bind(sock->handle, result->ai_addr, (int)result->ai_addrlen) != 0) {
+  if (bind(sock->fd, result->ai_addr, (int)result->ai_addrlen) != 0) {
     freeaddrinfo(result);
     return 0;
   }
 
   freeaddrinfo(result);
 
-  if (listen(sock->handle, 20) != 0) {
+  if (listen(sock->fd, 20) != 0) {
     return 0;
   }
 
@@ -121,14 +122,14 @@ bool32 pxe_socket_accept(pxe_socket* socket, pxe_socket* result) {
   int addr_size = (int)sizeof(their_addr);
 
   pxe_socket_handle new_fd =
-      accept(socket->handle, (struct sockaddr*)&their_addr, &addr_size);
+      accept(socket->fd, (struct sockaddr*)&their_addr, &addr_size);
 
   if (new_fd == SOCKET_ERROR) {
     return 0;
   }
 
   result->endpoint = their_addr;
-  result->handle = new_fd;
+  result->fd = new_fd;
   result->port = 0;
   result->state = PXE_SOCKET_STATE_CONNECTED;
 
@@ -144,7 +145,7 @@ size_t pxe_socket_send(pxe_socket* socket, const char* data, size_t size) {
 
   while (total_sent < size) {
     int current_sent =
-        send(socket->handle, data + total_sent, (int)(size - total_sent), 0);
+        send(socket->fd, data + total_sent, (int)(size - total_sent), 0);
 
     if (current_sent <= 0) {
       if (current_sent == SOCKET_ERROR) {
@@ -161,6 +162,10 @@ size_t pxe_socket_send(pxe_socket* socket, const char* data, size_t size) {
   }
 
   return total_sent;
+}
+
+size_t pxe_socket_send_buffer(pxe_socket* socket, pxe_buffer* buffer) {
+  return pxe_socket_send(socket, (char*)buffer->data, buffer->size);
 }
 
 size_t pxe_socket_send_chain(pxe_socket* socket, struct pxe_memory_arena* arena,
@@ -183,7 +188,7 @@ size_t pxe_socket_send_chain(pxe_socket* socket, struct pxe_memory_arena* arena,
 
   size_t sent = 0;
 
-  if (WSASend(socket->handle, wsa_buffers, (DWORD)num_buffers, (DWORD*)&sent, 0,
+  if (WSASend(socket->fd, wsa_buffers, (DWORD)num_buffers, (DWORD*)&sent, 0,
               NULL, NULL) != 0) {
     int err = pxe_get_error_code();
     fprintf(stderr, "Error using WSASend: %d\n", err);
@@ -197,7 +202,7 @@ size_t pxe_socket_send_chain(pxe_socket* socket, struct pxe_memory_arena* arena,
 }
 
 size_t pxe_socket_receive(pxe_socket* socket, char* data, size_t size) {
-  int recv_amount = recv(socket->handle, data, (int)size, MSG_DONTWAIT);
+  int recv_amount = recv(socket->fd, data, (int)size, MSG_DONTWAIT);
 
   if (recv_amount <= 0) {
     int err = pxe_get_error_code();
@@ -223,9 +228,9 @@ void pxe_socket_set_block(pxe_socket* socket, bool32 block) {
   unsigned long mode = block ? 0 : 1;
 
 #ifdef _WIN32
-  ioctlsocket(socket->handle, FIONBIO, &mode);
+  ioctlsocket(socket->fd, FIONBIO, &mode);
 #else
-  int opts = fcntl(socket->handle, F_GETFL);
+  int opts = fcntl(socket->fd, F_GETFL);
 
   if (opts < 0) return;
 

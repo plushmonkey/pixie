@@ -4,6 +4,7 @@
 #include "pixie.h"
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
 #include <WS2tcpip.h>
 #include <WinSock2.h>
 #else
@@ -32,7 +33,7 @@ typedef unsigned int pxe_socket_handle;
   }
 
 typedef struct {
-  const u8* data;
+  u8* data;
   size_t size;
 } pxe_buffer;
 
@@ -49,7 +50,7 @@ typedef enum {
 } pxe_socket_state;
 
 typedef struct {
-  pxe_socket_handle handle;
+  pxe_socket_handle fd;
   struct sockaddr_in endpoint;
   pxe_socket_state state;
   i32 error_code;
@@ -64,6 +65,7 @@ void pxe_socket_disconnect(pxe_socket* socket);
 bool32 pxe_socket_listen(pxe_socket* socket, const char* local_host, u16 port);
 bool32 pxe_socket_accept(pxe_socket* socket, pxe_socket* result);
 size_t pxe_socket_send(pxe_socket* socket, const char* data, size_t size);
+size_t pxe_socket_send_buffer(pxe_socket* socket, pxe_buffer* buffer);
 size_t pxe_socket_send_chain(pxe_socket* socket, struct pxe_memory_arena* arena,
                              pxe_buffer_chain* chain);
 size_t pxe_socket_receive(pxe_socket* socket, char* data, size_t size);
