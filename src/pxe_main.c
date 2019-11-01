@@ -1,41 +1,14 @@
 #include "pixie.h"
 
 #include "pxe_alloc.h"
+#include "pxe_buffer.h"
+#include "pxe_ping_server.h"
 #include "pxe_socket.h"
 #include "pxe_varint.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-inline pxe_buffer_chain* pxe_chain_insert(pxe_memory_arena* arena,
-                                          pxe_buffer_chain* chain, u8* data,
-                                          size_t size) {
-  pxe_buffer* buffer = pxe_arena_push_type(arena, pxe_buffer);
-  pxe_buffer_chain* new_chain = pxe_arena_push_type(arena, pxe_buffer_chain);
-
-  buffer->data = data;
-  buffer->size = size;
-
-  new_chain->buffer = buffer;
-  new_chain->next = chain;
-
-  return new_chain;
-}
-
-inline size_t pxe_chain_size(pxe_buffer_chain* chain) {
-  if (chain == NULL) return 0;
-
-  size_t size = 0;
-
-  do {
-    size += chain->buffer->size;
-
-    chain = chain->next;
-  } while (chain);
-
-  return size;
-}
 
 size_t write_string(char* dest, const char* src, size_t len) {
   size_t varint_size = pxe_varint_write(len, dest);
@@ -47,6 +20,28 @@ size_t write_string(char* dest, const char* src, size_t len) {
   }
 
   return varint_size + len;
+}
+
+void send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
+  const char* src, size_t size) {
+  size_t id_size = pxe_varint_size(packet_id);
+  size_t length_size = pxe_varint_size(size + id_size);
+  char* pkt = pxe_arena_alloc(arena, length_size + id_size + size);
+
+  size_t index = 0;
+
+  index += pxe_varint_write(size + id_size, pkt + index);
+  index += pxe_varint_write(packet_id, pkt + index);
+
+  char* payload = pkt + index;
+
+  for (size_t i = 0; i < size; ++i) {
+    payload[i] = src[i];
+  }
+
+  index += size;
+
+  pxe_socket_send(socket, pkt, index);
 }
 
 inline pxe_buffer_chain* generate_string_chain(pxe_memory_arena* arena,
@@ -107,28 +102,6 @@ pxe_buffer* generate_packet(pxe_memory_arena* arena, int packet_id,
   buffer->size = index;
 
   return buffer;
-}
-
-void send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
-                 const char* src, size_t size) {
-  size_t id_size = pxe_varint_size(packet_id);
-  size_t length_size = pxe_varint_size(size + id_size);
-  char* pkt = pxe_arena_alloc(arena, length_size + id_size + size);
-
-  size_t index = 0;
-
-  index += pxe_varint_write(size + id_size, pkt + index);
-  index += pxe_varint_write(packet_id, pkt + index);
-
-  char* payload = pkt + index;
-
-  for (size_t i = 0; i < size; ++i) {
-    payload[i] = src[i];
-  }
-
-  index += size;
-
-  pxe_socket_send(socket, pkt, index);
 }
 
 pxe_buffer_chain* generate_packet_chain(pxe_memory_arena* arena, int packet_id,
@@ -307,320 +280,8 @@ void test_connection(pxe_memory_arena* arena) {
   }
 }
 
-#define PXE_MAX_SESSIONS 1024
-
-typedef enum {
-  PXE_PROTOCOL_STATE_HANDSHAKE = 0,
-  PXE_PROTOCOL_STATE_STATUS,
-  PXE_PROTOCOL_STATE_LOGIN,
-  PXE_PROTOCOL_STATE_PLAY,
-
-  PXE_PROTOCOL_STATE_COUNT,
-} pxe_protocol_state;
-
-typedef struct pxe_session {
-  pxe_protocol_state protocol_state;
-  pxe_socket socket;
-} pxe_session;
-
-typedef struct pxe_ping_server {
-  pxe_socket listen_socket;
-  pxe_session sessions[PXE_MAX_SESSIONS];
-  size_t session_count;
-} pxe_ping_server;
-
-static const char pxe_ping_response[] =
-    "{\"version\": { \"name\": \"1.14.4\", \"protocol\": 498 }, \"players\": "
-    "{\"max\": 420, \"online\": 69, \"sample\": [{\"name\": \"plushmonkey\", "
-    "\"id\": \"e812180e-a8aa-4c9f-a8b3-07f591b8de20\"}]}, \"description\": "
-    "{\"text\": \"pixie ping server\"}}";
-static const char pxe_login_response[] =
-    "{\"text\": \"pixie ping server has no game server.\"}";
-
-// TODO: Each session should have a process buffer instead of assuming each
-// received buffer is one message.
-
-// TODO: buffer processor that handles read/write position and size validation
-bool32 pxe_ping_process_data(pxe_session* session, pxe_buffer* buffer,
-                             pxe_memory_arena* trans_arena) {
-  i64 pkt_len, pkt_id;
-
-  size_t index = pxe_varint_read((char*)buffer->data, buffer->size, &pkt_len);
-  if (index == 0) {
-    return 0;
-  }
-
-  size_t id_size = pxe_varint_read((char*)buffer->data + index,
-                                   buffer->size - index, &pkt_id);
-
-  if (id_size == 0) {
-    return 0;
-  }
-
-  index += id_size;
-
-  if (session->protocol_state == PXE_PROTOCOL_STATE_HANDSHAKE) {
-    i64 version;
-
-    if (index > buffer->size) {
-      return 0;
-    }
-
-    size_t version_size = pxe_varint_read((char*)buffer->data + index,
-                                          buffer->size - index, &version);
-    if (version_size == 0) {
-      return 0;
-    }
-
-    index += version_size;
-
-    if (index > buffer->size) {
-      return 0;
-    }
-
-    i64 hostname_len;
-    size_t hostname_len_size = pxe_varint_read(
-        (char*)buffer->data + index, buffer->size - index, &hostname_len);
-
-    if (hostname_len == 0) {
-      return 0;
-    }
-
-    index += hostname_len_size;
-
-    if (index + hostname_len > buffer->size) {
-      return 0;
-    }
-
-    char* hostname = pxe_arena_alloc(trans_arena, hostname_len);
-    for (i64 i = 0; i < hostname_len; ++i) {
-      hostname[i] = (char)buffer->data[index + i];
-    }
-
-    index += hostname_len;
-
-    if (index + sizeof(u16) > buffer->size) {
-      return 0;
-    }
-
-    u16 port = *(u16*)(buffer->data + index);
-
-    index += sizeof(u16);
-
-    i64 next_state;
-    size_t state_size =
-        pxe_varint_read((char*)buffer->data + index, buffer->size, &next_state);
-    if (state_size == 0) {
-      return 0;
-    }
-
-    // printf("Transitioning to state %lld\n", next_state);
-
-    if (next_state >= PXE_PROTOCOL_STATE_COUNT) {
-      printf("Illegal state: %lld. Terminating connection.\n", next_state);
-      return 0;
-    }
-
-    session->protocol_state = next_state;
-  } else if (session->protocol_state == PXE_PROTOCOL_STATE_STATUS) {
-    switch (pkt_id) {
-      case 0: {
-        // printf("Sending ping response.\n");
-        size_t data_size = array_size(pxe_ping_response);
-        size_t response_size = pxe_varint_size(data_size) + data_size;
-        char* response_str = pxe_arena_alloc(trans_arena, response_size);
-
-        write_string(response_str, pxe_ping_response, data_size);
-
-        send_packet(&session->socket, trans_arena, 0, response_str,
-                    response_size);
-      } break;
-      case 1: {
-        // Respond to the ping with the same payload.
-        send_packet(&session->socket, trans_arena, 1,
-                    (char*)buffer->data + index, buffer->size - index);
-      } break;
-      default: {
-        fprintf(stderr, "Received unhandled packet in state %d\n",
-                session->protocol_state);
-        return 0;
-      }
-    }
-  } else if (session->protocol_state == PXE_PROTOCOL_STATE_LOGIN) {
-    switch (pkt_id) {
-      case 0: {
-        i64 username_len;
-
-        size_t username_len_size = pxe_varint_read(
-            (char*)buffer->data + index, buffer->size - index, &username_len);
-
-        if (username_len_size > 0) {
-          index += username_len_size;
-
-          char* username = pxe_arena_alloc(trans_arena, username_len + 1);
-          for (i64 i = 0; i < username_len; ++i) {
-            username[i] = (char)buffer->data[index + i];
-          }
-
-          username[username_len] = 0;
-
-          printf("Login request from %s.\n", username);
-        }
-
-        size_t data_size = array_size(pxe_login_response);
-        size_t response_size = pxe_varint_size(data_size) + data_size;
-        char* response_str = pxe_arena_alloc(trans_arena, response_size);
-
-        write_string(response_str, pxe_login_response, data_size);
-
-        send_packet(&session->socket, trans_arena, 0, response_str,
-                    response_size);
-        return 0;
-      } break;
-      default: {
-        fprintf(stderr, "Received unhandled packet in state %d\n",
-                session->protocol_state);
-        return 0;
-      }
-    }
-  } else {
-    printf("Unhandled protocol state\n");
-    return 0;
-  }
-
-  return 1;
-}
-
-pxe_ping_server* pxe_ping_server_create(pxe_memory_arena* perm_arena) {
-  pxe_socket listen_socket = {0};
-
-  if (pxe_socket_listen(&listen_socket, "127.0.0.1", 25565) == 0) {
-    fprintf(stderr, "Failed to listen with socket.\n");
-    return NULL;
-  }
-
-  pxe_ping_server* ping_server =
-      pxe_arena_push_type(perm_arena, pxe_ping_server);
-
-  ping_server->session_count = 0;
-  ping_server->listen_socket = listen_socket;
-
-  return ping_server;
-}
-
-void test_server(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena) {
-  pxe_ping_server* ping_server = pxe_ping_server_create(perm_arena);
-
-  if (ping_server == NULL) {
-    fprintf(stderr, "Failed to create ping server.\n");
-    return;
-  }
-
-  struct timeval timeout = {0};
-
-  printf("Listening for connections...\n");
-  fflush(stdout);
-
-  size_t counter = 0;
-
-  pxe_socket* listen_socket = &ping_server->listen_socket;
-
-  while (listen_socket->state == PXE_SOCKET_STATE_LISTENING) {
-    fd_set read_set = {0};
-
-    FD_SET(listen_socket->fd, &read_set);
-
-    for (size_t i = 0; i < ping_server->session_count; ++i) {
-      pxe_session* session = ping_server->sessions + i;
-
-      FD_SET(session->socket.fd, &read_set);
-    }
-
-    /*if (++counter == 1000000) {
-      printf("Session count: %lld\n", ping_server->session_count);
-      fflush(stdout);
-      counter = 0;
-    }*/
-
-    if (select(0, &read_set, NULL, NULL, &timeout) > 0) {
-      if (FD_ISSET(listen_socket->fd, &read_set)) {
-        pxe_socket new_socket = {0};
-
-        if (pxe_socket_accept(listen_socket, &new_socket) == 0) {
-          fprintf(stderr, "Failed to accept new socket\n");
-        } else {
-          u8 bytes[] = ENDPOINT_BYTES(new_socket.endpoint);
-
-          // printf("Accepted %hhu.%hhu.%hhu.%hhu:%hu\n", bytes[0], bytes[1],
-          //     bytes[2], bytes[3], new_socket.endpoint.sin_port);
-
-          pxe_socket_set_block(&new_socket, 0);
-
-          size_t index = ping_server->session_count++;
-
-          ping_server->sessions[index].protocol_state =
-              PXE_PROTOCOL_STATE_HANDSHAKE;
-          ping_server->sessions[index].socket = new_socket;
-        }
-
-        fflush(stdout);
-      }
-
-      char* read_buf = pxe_arena_alloc(trans_arena, 4096);
-
-      for (size_t i = 0; i < ping_server->session_count;) {
-        pxe_session* session = ping_server->sessions + i;
-        pxe_socket* socket = &session->socket;
-
-        if (FD_ISSET(socket->fd, &read_set)) {
-          size_t buf_size = pxe_socket_receive(socket, read_buf, 4096);
-
-          if (socket->state != PXE_SOCKET_STATE_CONNECTED) {
-            // Swap the last session to the current position then decrement
-            // session count so this session is removed.
-            ping_server->sessions[i] =
-                ping_server->sessions[ping_server->session_count - 1];
-
-            --ping_server->session_count;
-
-            u8 bytes[] = ENDPOINT_BYTES(socket->endpoint);
-
-            // printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0],
-            //     bytes[1], bytes[2], bytes[3], socket->endpoint.sin_port);
-
-            continue;
-          }
-
-          pxe_buffer buffer;
-
-          buffer.data = (u8*)read_buf;
-          buffer.size = buf_size;
-
-          if (pxe_ping_process_data(session, &buffer, trans_arena) == 0) {
-            u8 bytes[] = ENDPOINT_BYTES(socket->endpoint);
-
-            printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0],
-                   bytes[1], bytes[2], bytes[3], socket->endpoint.sin_port);
-
-            pxe_socket_disconnect(socket);
-
-            ping_server->sessions[i] =
-                ping_server->sessions[ping_server->session_count - 1];
-            --ping_server->session_count;
-
-            fflush(stdout);
-            continue;
-          }
-
-          fflush(stdout);
-        }
-
-        ++i;
-      }
-    }
-
-    pxe_arena_reset(trans_arena);
-  }
+void test_buffers(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena) {
+  
 }
 
 int main(int argc, char* argv[]) {
@@ -645,7 +306,8 @@ int main(int argc, char* argv[]) {
   pxe_arena_initialize(&perm_arena, perm_memory, perm_size);
 
   // test_connection(&trans_arena);
-  test_server(&perm_arena, &trans_arena);
+  pxe_ping_server_run(&perm_arena, &trans_arena);
+//  test_buffers(&perm_arena, &trans_arena);
 
   return 0;
 }

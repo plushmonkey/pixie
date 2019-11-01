@@ -32,16 +32,6 @@ typedef unsigned int pxe_socket_handle;
         (endpoint).sin_addr.S_un.S_un_b.s_b4  \
   }
 
-typedef struct {
-  u8* data;
-  size_t size;
-} pxe_buffer;
-
-typedef struct pxe_buffer_chain {
-  pxe_buffer* buffer;
-  struct pxe_buffer_chain* next;
-} pxe_buffer_chain;
-
 typedef enum {
   PXE_SOCKET_STATE_DISCONNECTED = 0,
   PXE_SOCKET_STATE_CONNECTED,
@@ -58,6 +48,8 @@ typedef struct {
 } pxe_socket;
 
 struct pxe_memory_arena;
+struct pxe_buffer;
+struct pxe_buffer_chain;
 
 bool32 pxe_socket_connect(pxe_socket* socket, const char* server, u16 port);
 void pxe_socket_disconnect(pxe_socket* socket);
@@ -65,9 +57,9 @@ void pxe_socket_disconnect(pxe_socket* socket);
 bool32 pxe_socket_listen(pxe_socket* socket, const char* local_host, u16 port);
 bool32 pxe_socket_accept(pxe_socket* socket, pxe_socket* result);
 size_t pxe_socket_send(pxe_socket* socket, const char* data, size_t size);
-size_t pxe_socket_send_buffer(pxe_socket* socket, pxe_buffer* buffer);
+size_t pxe_socket_send_buffer(pxe_socket* socket, struct pxe_buffer* buffer);
 size_t pxe_socket_send_chain(pxe_socket* socket, struct pxe_memory_arena* arena,
-                             pxe_buffer_chain* chain);
+                             struct pxe_buffer_chain* chain);
 size_t pxe_socket_receive(pxe_socket* socket, char* data, size_t size);
 void pxe_socket_set_block(pxe_socket* socket, bool32 block);
 

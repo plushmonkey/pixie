@@ -1,6 +1,7 @@
 #include "pxe_socket.h"
 
 #include "pxe_alloc.h"
+#include "pxe_buffer.h"
 
 #include <stdio.h>
 
