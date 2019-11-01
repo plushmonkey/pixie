@@ -174,7 +174,7 @@ pxe_process_result pxe_ping_process_session(pxe_ping_server* ping_server,
 
         username[username_len] = 0;
 
-        printf("Login request from %s.\n", username);
+        // printf("Login request from %s.\n", username);
 
         size_t data_size = array_size(pxe_login_response);
         size_t response_size = pxe_varint_size(data_size) + data_size;
@@ -258,8 +258,6 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
   printf("Listening for connections...\n");
   fflush(stdout);
 
-  size_t counter = 0;
-
   pxe_socket* listen_socket = &ping_server->listen_socket;
 
   while (listen_socket->state == PXE_SOCKET_STATE_LISTENING) {
@@ -273,12 +271,6 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
       FD_SET(session->socket.fd, &read_set);
     }
 
-    /*if (++counter == 1000000) {
-      printf("Session count: %lld\n", ping_server->session_count);
-      fflush(stdout);
-      counter = 0;
-    }*/
-
     if (select(0, &read_set, NULL, NULL, &timeout) > 0) {
       if (FD_ISSET(listen_socket->fd, &read_set)) {
         pxe_socket new_socket = {0};
@@ -286,7 +278,7 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
         if (pxe_socket_accept(listen_socket, &new_socket) == 0) {
           fprintf(stderr, "Failed to accept new socket\n");
         } else {
-          u8 bytes[] = ENDPOINT_BYTES(new_socket.endpoint);
+          // u8 bytes[] = ENDPOINT_BYTES(new_socket.endpoint);
 
           // printf("Accepted %hhu.%hhu.%hhu.%hhu:%hu\n", bytes[0], bytes[1],
           //     bytes[2], bytes[3], new_socket.endpoint.sin_port);
@@ -300,8 +292,8 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
           ping_server->sessions[index].socket = new_socket;
           ping_server->sessions[index].buffer_reader.read_pos = 0;
           ping_server->sessions[index].buffer_reader.chain = NULL;
-          ping_server->sessions[index].last_buffer_chain =
-              ping_server->sessions[index].process_buffer_chain = NULL;
+          ping_server->sessions[index].last_buffer_chain = NULL;
+          ping_server->sessions[index].process_buffer_chain = NULL;
         }
 
         fflush(stdout);
@@ -319,10 +311,19 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
           buffer->size =
               pxe_socket_receive(socket, (char*)buffer->data, READ_BUFFER_SIZE);
 
+          if (session->process_buffer_chain == NULL) {
+            session->process_buffer_chain = buffer_chain;
+            session->last_buffer_chain = buffer_chain;
+          } else {
+            session->last_buffer_chain->next = buffer_chain;
+            session->last_buffer_chain = buffer_chain;
+          }
+
           if (socket->state != PXE_SOCKET_STATE_CONNECTED) {
+            pxe_ping_free_session(ping_server, session);
+
             // Swap the last session to the current position then decrement
             // session count so this session is removed.
-            pxe_ping_free_session(ping_server, session);
 
             ping_server->sessions[i] =
                 ping_server->sessions[ping_server->session_count - 1];
@@ -337,14 +338,6 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
             continue;
           }
 
-          if (session->process_buffer_chain == NULL) {
-            session->process_buffer_chain = buffer_chain;
-            session->last_buffer_chain = buffer_chain;
-          } else {
-            session->last_buffer_chain->next = buffer_chain;
-            session->last_buffer_chain = buffer_chain;
-          }
-
           pxe_process_result process_result = PXE_PROCESS_RESULT_CONTINUE;
 
           while (process_result == PXE_PROCESS_RESULT_CONTINUE) {
@@ -354,10 +347,10 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
             if (process_result == PXE_PROCESS_RESULT_DESTROY) {
               pxe_ping_free_session(ping_server, session);
 
-              u8 bytes[] = ENDPOINT_BYTES(socket->endpoint);
+              // u8 bytes[] = ENDPOINT_BYTES(socket->endpoint);
 
-              printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0],
-                     bytes[1], bytes[2], bytes[3], socket->endpoint.sin_port);
+              // printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0],
+              //     bytes[1], bytes[2], bytes[3], socket->endpoint.sin_port);
 
               pxe_socket_disconnect(socket);
 
