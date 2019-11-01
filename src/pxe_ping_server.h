@@ -36,6 +36,7 @@ typedef struct pxe_ping_server {
 } pxe_ping_server;
 
 pxe_ping_server* pxe_ping_server_create(struct pxe_memory_arena* perm_arena);
-void pxe_ping_server_run(struct pxe_memory_arena* perm_arena, struct pxe_memory_arena* trans_arena);
+void pxe_ping_server_run(struct pxe_memory_arena* perm_arena,
+                         struct pxe_memory_arena* trans_arena);
 
 #endif

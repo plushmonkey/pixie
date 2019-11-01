@@ -23,7 +23,7 @@ size_t write_string(char* dest, const char* src, size_t len) {
 }
 
 void send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
-  const char* src, size_t size) {
+                 const char* src, size_t size) {
   size_t id_size = pxe_varint_size(packet_id);
   size_t length_size = pxe_varint_size(size + id_size);
   char* pkt = pxe_arena_alloc(arena, length_size + id_size + size);
@@ -281,7 +281,7 @@ void test_connection(pxe_memory_arena* arena) {
 }
 
 void test_buffers(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena) {
-  
+
 }
 
 int main(int argc, char* argv[]) {
@@ -307,7 +307,7 @@ int main(int argc, char* argv[]) {
 
   // test_connection(&trans_arena);
   pxe_ping_server_run(&perm_arena, &trans_arena);
-//  test_buffers(&perm_arena, &trans_arena);
+  //  test_buffers(&perm_arena, &trans_arena);
 
   return 0;
 }

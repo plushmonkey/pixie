@@ -11,7 +11,7 @@
 #define bswap_64(x) _byteswap_uint64(x)
 #endif
 
-#define bswap_16(x) ((((x) & 0xFF) << 8) | (((x) & 0xFF00) >> 8))
+#define bswap_16(x) ((((x)&0xFF) << 8) | (((x)&0xFF00) >> 8))
 
 pxe_buffer_chain* pxe_chain_insert(pxe_memory_arena* arena,
                                    pxe_buffer_chain* chain, u8* data,
@@ -42,8 +42,10 @@ size_t pxe_chain_size(pxe_buffer_chain* chain) {
   return size;
 }
 
-// Returns the current buffer_chain that falls in the reader's read_pos and its base position.
-bool32 pxe_buffer_get_pos_and_chain(pxe_buffer_chain_reader* reader, pxe_buffer_chain** base, size_t* base_pos) {
+// Returns the current buffer_chain that falls in the reader's read_pos and its
+// base position.
+bool32 pxe_buffer_get_pos_and_chain(pxe_buffer_chain_reader* reader,
+                                    pxe_buffer_chain** base, size_t* base_pos) {
   pxe_buffer_chain* current = reader->chain;
   pxe_buffer_chain* prev = current;
 
@@ -107,7 +109,7 @@ bool32 pxe_buffer_chain_read_u16(pxe_buffer_chain_reader* reader, u16* out) {
       return 0;
     }
 
-    char buf[2] = { 0 };
+    char buf[2] = {0};
 
     size_t first_len = current->buffer->size - read_index;
     size_t second_len = array_size(buf) - first_len;
@@ -153,7 +155,7 @@ bool32 pxe_buffer_chain_read_u32(pxe_buffer_chain_reader* reader, u32* out) {
       return 0;
     }
 
-    char buf[4] = { 0 };
+    char buf[4] = {0};
 
     size_t first_len = current->buffer->size - read_index;
     size_t second_len = array_size(buf) - first_len;
@@ -199,7 +201,7 @@ bool32 pxe_buffer_chain_read_u64(pxe_buffer_chain_reader* reader, u64* out) {
       return 0;
     }
 
-    char buf[8] = { 0 };
+    char buf[8] = {0};
 
     size_t first_len = current->buffer->size - read_index;
     size_t second_len = array_size(buf) - first_len;
@@ -226,7 +228,8 @@ bool32 pxe_buffer_chain_read_u64(pxe_buffer_chain_reader* reader, u64* out) {
   return 1;
 }
 
-bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader, i64* value) {
+bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader,
+                                    i64* value) {
   pxe_buffer_chain* current = NULL;
   size_t base_pos = 0;
 
@@ -262,7 +265,8 @@ bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader, i64* value)
   return 1;
 }
 
-bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader, char* out, size_t* size) {
+bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader,
+                                           char* out, size_t* size) {
   i64 str_len;
 
   size_t pos_snapshot = reader->read_pos;
