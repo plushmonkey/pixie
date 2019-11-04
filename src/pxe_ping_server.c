@@ -80,6 +80,7 @@ pxe_process_result pxe_ping_process_session(pxe_ping_server* ping_server,
                                             pxe_session* session,
                                             pxe_memory_arena* trans_arena) {
   pxe_buffer_chain_reader* reader = &session->buffer_reader;
+
   session->buffer_reader.chain = session->process_buffer_chain;
 
   i64 pkt_len, pkt_id;
@@ -237,7 +238,7 @@ pxe_ping_server* pxe_ping_server_create(pxe_memory_arena* perm_arena) {
   ping_server->listen_socket = listen_socket;
   ping_server->free_buffers = NULL;
 
-  for (size_t i = 0; i < PXE_MAX_SESSIONS; ++i) {
+  for (size_t i = 0; i < PXE_PING_SERVER_MAX_SESSIONS; ++i) {
     ping_server->sessions[i].buffer_reader.read_pos = 0;
   }
 
@@ -341,10 +342,15 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
           pxe_process_result process_result = PXE_PROCESS_RESULT_CONTINUE;
 
           while (process_result == PXE_PROCESS_RESULT_CONTINUE) {
+            size_t reader_pos_snapshot = session->buffer_reader.read_pos;
+
             process_result =
                 pxe_ping_process_session(ping_server, session, trans_arena);
 
-            if (process_result == PXE_PROCESS_RESULT_DESTROY) {
+            if (process_result == PXE_PROCESS_RESULT_CONSUMED) {
+              // Revert the read position because the last process didn't fully read a packet.
+              session->buffer_reader.read_pos = reader_pos_snapshot;
+            } else if (process_result == PXE_PROCESS_RESULT_DESTROY) {
               pxe_ping_free_session(ping_server, session);
 
               // u8 bytes[] = ENDPOINT_BYTES(socket->endpoint);

@@ -4,14 +4,16 @@
 
 #include <stdlib.h>
 
+#include <Windows.h>
 // TODO: Endianness
 
 #ifdef _MSC_VER
+#define bswap_16(x) _byteswap_ushort(x)
 #define bswap_32(x) _byteswap_ulong(x)
 #define bswap_64(x) _byteswap_uint64(x)
-#endif
-
+#else
 #define bswap_16(x) ((((x)&0xFF) << 8) | (((x)&0xFF00) >> 8))
+#endif
 
 pxe_buffer_chain* pxe_chain_insert(pxe_memory_arena* arena,
                                    pxe_buffer_chain* chain, u8* data,
@@ -52,23 +54,19 @@ bool32 pxe_buffer_get_pos_and_chain(pxe_buffer_chain_reader* reader,
   if (current == NULL) return 0;
 
   size_t pos = 0;
-  size_t buffer_index = 0;
 
   do {
     pos += current->buffer->size;
     prev = current;
     current = current->next;
-    ++buffer_index;
-  } while (pos < reader->read_pos && current);
+  } while (pos <= reader->read_pos && current);
 
-  --buffer_index;
-
-  if (prev == NULL || (current == NULL && pos < reader->read_pos)) {
+  if (prev == NULL || (current == NULL && pos <= reader->read_pos)) {
     return 0;
   }
 
   *base = prev;
-  *base_pos = buffer_index * prev->buffer->size;
+  *base_pos = pos - prev->buffer->size;
 
   return 1;
 }
@@ -291,7 +289,7 @@ bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader,
 
   size_t read_index = reader->read_pos - base_pos;
 
-  for (size_t i = 0; i < (size_t)str_len; ++i) {
+  for (size_t i = 0; i < (size_t)str_len;) {
     out[i] = (char)current->buffer->data[read_index];
 
     ++read_index;
@@ -303,7 +301,11 @@ bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader,
       }
 
       current = current->next;
+      read_index = 0;
+      continue;
     }
+
+    ++i;
   }
 
   reader->read_pos += str_len;

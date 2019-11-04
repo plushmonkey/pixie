@@ -5,7 +5,7 @@
 #include "pxe_buffer.h"
 #include "pxe_socket.h"
 
-#define PXE_MAX_SESSIONS 1024
+#define PXE_PING_SERVER_MAX_SESSIONS 4096
 
 typedef enum {
   PXE_PROTOCOL_STATE_HANDSHAKE = 0,
@@ -29,7 +29,7 @@ typedef struct pxe_session {
 
 typedef struct pxe_ping_server {
   pxe_socket listen_socket;
-  pxe_session sessions[PXE_MAX_SESSIONS];
+  pxe_session sessions[PXE_PING_SERVER_MAX_SESSIONS];
   size_t session_count;
 
   struct pxe_buffer_chain* free_buffers;
