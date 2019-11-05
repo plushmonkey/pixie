@@ -1,11 +1,11 @@
-#ifndef PIXIE_PING_SERVER_H_
-#define PIXIE_PING_SERVER_H_
+#ifndef PIXIE_GAME_SERVER_H_
+#define PIXIE_GAME_SERVER_H_
 
 #include "pixie.h"
 #include "pxe_buffer.h"
 #include "pxe_socket.h"
 
-#define PXE_PING_SERVER_MAX_SESSIONS 4096
+#define PXE_GAME_SERVER_MAX_SESSIONS 4096
 
 typedef enum {
   PXE_PROTOCOL_STATE_HANDSHAKE = 0,
@@ -27,16 +27,22 @@ typedef struct pxe_session {
   struct pxe_buffer_chain* last_buffer_chain;
 } pxe_session;
 
-typedef struct pxe_ping_server {
+typedef struct pxe_game_server {
   pxe_socket listen_socket;
-  pxe_session sessions[PXE_PING_SERVER_MAX_SESSIONS];
+  pxe_session sessions[PXE_GAME_SERVER_MAX_SESSIONS];
   size_t session_count;
 
-  struct pxe_buffer_chain* free_buffers;
-} pxe_ping_server;
 
-pxe_ping_server* pxe_ping_server_create(struct pxe_memory_arena* perm_arena);
-void pxe_ping_server_run(struct pxe_memory_arena* perm_arena,
+#ifdef _WIN32
+  WSAPOLLFD events[PXE_GAME_SERVER_MAX_SESSIONS];
+  size_t nevents;
+#endif
+
+  struct pxe_buffer_chain* free_buffers;
+} pxe_game_server;
+
+pxe_game_server* pxe_game_server_create(struct pxe_memory_arena* perm_arena);
+void pxe_game_server_run(struct pxe_memory_arena* perm_arena,
                          struct pxe_memory_arena* trans_arena);
 
 #endif

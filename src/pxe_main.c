@@ -2,7 +2,7 @@
 
 #include "pxe_alloc.h"
 #include "pxe_buffer.h"
-#include "pxe_ping_server.h"
+#include "pxe_game_server.h"
 #include "pxe_socket.h"
 #include "pxe_varint.h"
 
@@ -306,7 +306,7 @@ int main(int argc, char* argv[]) {
   pxe_arena_initialize(&perm_arena, perm_memory, perm_size);
 
   // test_connection(&trans_arena);
-  pxe_ping_server_run(&perm_arena, &trans_arena);
+  pxe_game_server_run(&perm_arena, &trans_arena);
   //  test_buffers(&perm_arena, &trans_arena);
 
   return 0;

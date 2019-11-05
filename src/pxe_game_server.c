@@ -1,4 +1,4 @@
-#include "pxe_ping_server.h"
+#include "pxe_game_server.h"
 
 #include "pxe_alloc.h"
 #include "pxe_buffer.h"
@@ -26,9 +26,14 @@ size_t write_string(char* dest, const char* src, size_t len);
 void send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
                  const char* src, size_t size);
 
+void pxe_game_server_wsa_poll(pxe_game_server* game_server,
+                              pxe_socket* listen_socket,
+                              pxe_memory_arena* perm_arena,
+                              pxe_memory_arena* trans_arena);
+
 static size_t allocated_buffers = 0;
 
-pxe_buffer_chain* pxe_ping_get_read_buffer_chain(pxe_ping_server* server,
+pxe_buffer_chain* pxe_game_get_read_buffer_chain(pxe_game_server* server,
                                                  pxe_memory_arena* perm_arena) {
   if (server->free_buffers == NULL) {
     pxe_buffer_chain* chain = pxe_arena_push_type(perm_arena, pxe_buffer_chain);
@@ -54,20 +59,20 @@ pxe_buffer_chain* pxe_ping_get_read_buffer_chain(pxe_ping_server* server,
   return head;
 }
 
-inline void pxe_ping_free_buffer_chain(pxe_ping_server* server,
+inline void pxe_game_free_buffer_chain(pxe_game_server* server,
                                        pxe_buffer_chain* chain) {
   chain->next = server->free_buffers;
   server->free_buffers = chain;
 }
 
-void pxe_ping_free_session(pxe_ping_server* server, pxe_session* session) {
+void pxe_game_free_session(pxe_game_server* server, pxe_session* session) {
   pxe_buffer_chain* current = session->process_buffer_chain;
 
   // Free all of the unprocessed data for this session.
   while (current) {
     pxe_buffer_chain* next = current->next;
 
-    pxe_ping_free_buffer_chain(server, current);
+    pxe_game_free_buffer_chain(server, current);
 
     current = next;
   }
@@ -76,7 +81,7 @@ void pxe_ping_free_session(pxe_ping_server* server, pxe_session* session) {
   session->last_buffer_chain = NULL;
 }
 
-pxe_process_result pxe_ping_process_session(pxe_ping_server* ping_server,
+pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
                                             pxe_session* session,
                                             pxe_memory_arena* trans_arena) {
   pxe_buffer_chain_reader* reader = &session->buffer_reader;
@@ -132,7 +137,7 @@ pxe_process_result pxe_ping_process_session(pxe_ping_server* ping_server,
   } else if (session->protocol_state == PXE_PROTOCOL_STATE_STATUS) {
     switch (pkt_id) {
       case 0: {
-        // printf("Sending ping response.\n");
+        // printf("Sending game response.\n");
         size_t data_size = array_size(pxe_ping_response);
         size_t response_size = pxe_varint_size(data_size) + data_size;
         char* response_str = pxe_arena_alloc(trans_arena, response_size);
@@ -143,7 +148,7 @@ pxe_process_result pxe_ping_process_session(pxe_ping_server* ping_server,
                     response_size);
       } break;
       case 1: {
-        // Respond to the ping with the same payload.
+        // Respond to the game with the same payload.
         u64 payload;
         if (pxe_buffer_chain_read_u64(reader, &payload) == 0) {
           return PXE_PROCESS_RESULT_CONSUMED;
@@ -206,7 +211,7 @@ pxe_process_result pxe_ping_process_session(pxe_ping_server* ping_server,
 
     pxe_buffer_chain* next = current->next;
 
-    pxe_ping_free_buffer_chain(ping_server, current);
+    pxe_game_free_buffer_chain(game_server, current);
 
     current = next;
 
@@ -223,7 +228,7 @@ pxe_process_result pxe_ping_process_session(pxe_ping_server* ping_server,
   return PXE_PROCESS_RESULT_CONTINUE;
 }
 
-pxe_ping_server* pxe_ping_server_create(pxe_memory_arena* perm_arena) {
+pxe_game_server* pxe_game_server_create(pxe_memory_arena* perm_arena) {
   pxe_socket listen_socket = {0};
 
   if (pxe_socket_listen(&listen_socket, "127.0.0.1", 25565) == 0) {
@@ -231,26 +236,74 @@ pxe_ping_server* pxe_ping_server_create(pxe_memory_arena* perm_arena) {
     return NULL;
   }
 
-  pxe_ping_server* ping_server =
-      pxe_arena_push_type(perm_arena, pxe_ping_server);
+  pxe_game_server* game_server =
+      pxe_arena_push_type(perm_arena, pxe_game_server);
 
-  ping_server->session_count = 0;
-  ping_server->listen_socket = listen_socket;
-  ping_server->free_buffers = NULL;
+  game_server->session_count = 0;
+  game_server->listen_socket = listen_socket;
+  game_server->free_buffers = NULL;
 
-  for (size_t i = 0; i < PXE_PING_SERVER_MAX_SESSIONS; ++i) {
-    ping_server->sessions[i].buffer_reader.read_pos = 0;
+#ifdef _WIN32
+  game_server->nevents = 0;
+#endif
+
+  for (size_t i = 0; i < PXE_GAME_SERVER_MAX_SESSIONS; ++i) {
+    game_server->sessions[i].buffer_reader.read_pos = 0;
   }
 
-  return ping_server;
+  return game_server;
 }
 
-void pxe_ping_server_run(pxe_memory_arena* perm_arena,
-                         pxe_memory_arena* trans_arena) {
-  pxe_ping_server* ping_server = pxe_ping_server_create(perm_arena);
+bool32 pxe_game_server_read_session(pxe_game_server* game_server,
+                                    pxe_memory_arena* perm_arena,
+                                    pxe_memory_arena* trans_arena,
+                                    pxe_session* session) {
+  pxe_socket* socket = &session->socket;
+  pxe_buffer_chain* buffer_chain =
+      pxe_game_get_read_buffer_chain(game_server, perm_arena);
+  pxe_buffer* buffer = buffer_chain->buffer;
 
-  if (ping_server == NULL) {
-    fprintf(stderr, "Failed to create ping server.\n");
+  buffer->size =
+      pxe_socket_receive(socket, (char*)buffer->data, READ_BUFFER_SIZE);
+
+  if (session->process_buffer_chain == NULL) {
+    session->process_buffer_chain = buffer_chain;
+    session->last_buffer_chain = buffer_chain;
+  } else {
+    session->last_buffer_chain->next = buffer_chain;
+    session->last_buffer_chain = buffer_chain;
+  }
+
+  if (socket->state != PXE_SOCKET_STATE_CONNECTED) {
+    return 0;
+  }
+
+  pxe_process_result process_result = PXE_PROCESS_RESULT_CONTINUE;
+
+  while (process_result == PXE_PROCESS_RESULT_CONTINUE) {
+    size_t reader_pos_snapshot = session->buffer_reader.read_pos;
+
+    process_result =
+        pxe_game_process_session(game_server, session, trans_arena);
+
+    if (process_result == PXE_PROCESS_RESULT_CONSUMED) {
+      // Revert the read position because the last process didn't fully
+      // read a packet.
+      session->buffer_reader.read_pos = reader_pos_snapshot;
+    }
+  }
+
+  fflush(stdout);
+
+  return process_result != PXE_PROCESS_RESULT_DESTROY;
+}
+
+void pxe_game_server_run(pxe_memory_arena* perm_arena,
+                         pxe_memory_arena* trans_arena) {
+  pxe_game_server* game_server = pxe_game_server_create(perm_arena);
+
+  if (game_server == NULL) {
+    fprintf(stderr, "Failed to create game server.\n");
     return;
   }
 
@@ -259,126 +312,98 @@ void pxe_ping_server_run(pxe_memory_arena* perm_arena,
   printf("Listening for connections...\n");
   fflush(stdout);
 
-  pxe_socket* listen_socket = &ping_server->listen_socket;
+  pxe_socket* listen_socket = &game_server->listen_socket;
+
+#ifdef _WIN32
+  game_server->events[0].fd = listen_socket->fd;
+  game_server->events[0].events = POLLIN;
+  game_server->events[0].revents = 0;
+
+  game_server->nevents = 1;
+#endif
 
   while (listen_socket->state == PXE_SOCKET_STATE_LISTENING) {
-    fd_set read_set = {0};
-
-    FD_SET(listen_socket->fd, &read_set);
-
-    for (size_t i = 0; i < ping_server->session_count; ++i) {
-      pxe_session* session = ping_server->sessions + i;
-
-      FD_SET(session->socket.fd, &read_set);
-    }
-
-    if (select(0, &read_set, NULL, NULL, &timeout) > 0) {
-      if (FD_ISSET(listen_socket->fd, &read_set)) {
-        pxe_socket new_socket = {0};
-
-        if (pxe_socket_accept(listen_socket, &new_socket) == 0) {
-          fprintf(stderr, "Failed to accept new socket\n");
-        } else {
-          // u8 bytes[] = ENDPOINT_BYTES(new_socket.endpoint);
-
-          // printf("Accepted %hhu.%hhu.%hhu.%hhu:%hu\n", bytes[0], bytes[1],
-          //     bytes[2], bytes[3], new_socket.endpoint.sin_port);
-
-          pxe_socket_set_block(&new_socket, 0);
-
-          size_t index = ping_server->session_count++;
-
-          ping_server->sessions[index].protocol_state =
-              PXE_PROTOCOL_STATE_HANDSHAKE;
-          ping_server->sessions[index].socket = new_socket;
-          ping_server->sessions[index].buffer_reader.read_pos = 0;
-          ping_server->sessions[index].buffer_reader.chain = NULL;
-          ping_server->sessions[index].last_buffer_chain = NULL;
-          ping_server->sessions[index].process_buffer_chain = NULL;
-        }
-
-        fflush(stdout);
-      }
-
-      for (size_t i = 0; i < ping_server->session_count;) {
-        pxe_session* session = ping_server->sessions + i;
-        pxe_socket* socket = &session->socket;
-
-        if (FD_ISSET(socket->fd, &read_set)) {
-          pxe_buffer_chain* buffer_chain =
-              pxe_ping_get_read_buffer_chain(ping_server, perm_arena);
-          pxe_buffer* buffer = buffer_chain->buffer;
-
-          buffer->size =
-              pxe_socket_receive(socket, (char*)buffer->data, READ_BUFFER_SIZE);
-
-          if (session->process_buffer_chain == NULL) {
-            session->process_buffer_chain = buffer_chain;
-            session->last_buffer_chain = buffer_chain;
-          } else {
-            session->last_buffer_chain->next = buffer_chain;
-            session->last_buffer_chain = buffer_chain;
-          }
-
-          if (socket->state != PXE_SOCKET_STATE_CONNECTED) {
-            pxe_ping_free_session(ping_server, session);
-
-            // Swap the last session to the current position then decrement
-            // session count so this session is removed.
-
-            ping_server->sessions[i] =
-                ping_server->sessions[ping_server->session_count - 1];
-
-            --ping_server->session_count;
-
-            u8 bytes[] = ENDPOINT_BYTES(socket->endpoint);
-
-            // printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0],
-            //     bytes[1], bytes[2], bytes[3], socket->endpoint.sin_port);
-
-            continue;
-          }
-
-          pxe_process_result process_result = PXE_PROCESS_RESULT_CONTINUE;
-
-          while (process_result == PXE_PROCESS_RESULT_CONTINUE) {
-            size_t reader_pos_snapshot = session->buffer_reader.read_pos;
-
-            process_result =
-                pxe_ping_process_session(ping_server, session, trans_arena);
-
-            if (process_result == PXE_PROCESS_RESULT_CONSUMED) {
-              // Revert the read position because the last process didn't fully read a packet.
-              session->buffer_reader.read_pos = reader_pos_snapshot;
-            } else if (process_result == PXE_PROCESS_RESULT_DESTROY) {
-              pxe_ping_free_session(ping_server, session);
-
-              // u8 bytes[] = ENDPOINT_BYTES(socket->endpoint);
-
-              // printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0],
-              //     bytes[1], bytes[2], bytes[3], socket->endpoint.sin_port);
-
-              pxe_socket_disconnect(socket);
-
-              ping_server->sessions[i] =
-                  ping_server->sessions[ping_server->session_count - 1];
-              --ping_server->session_count;
-
-              break;
-            }
-          }
-
-          fflush(stdout);
-
-          if (process_result == PXE_PROCESS_RESULT_DESTROY) {
-            continue;
-          }
-        }
-
-        ++i;
-      }
-    }
-
+#ifdef _WIN32
+    pxe_game_server_wsa_poll(game_server, listen_socket, perm_arena,
+                             trans_arena);
+#endif
     pxe_arena_reset(trans_arena);
   }
+}
+
+void pxe_game_server_wsa_poll(pxe_game_server* game_server,
+                              pxe_socket* listen_socket,
+                              pxe_memory_arena* perm_arena,
+                              pxe_memory_arena* trans_arena) {
+#ifdef _WIN32
+  int wsa_result = WSAPoll(game_server->events, (ULONG)game_server->nevents, 0);
+
+  if (wsa_result > 0) {
+    if (game_server->events[0].revents != 0) {
+      pxe_socket new_socket = {0};
+
+      if (pxe_socket_accept(listen_socket, &new_socket)) {
+        // u8 bytes[] = ENDPOINT_BYTES(new_socket.endpoint);
+
+        // printf("Accepted %hhu.%hhu.%hhu.%hhu:%hu\n", bytes[0], bytes[1],
+        // bytes[2], bytes[3], new_socket.endpoint.sin_port);
+
+        pxe_socket_set_block(&new_socket, 0);
+
+        size_t index = game_server->session_count++;
+
+        game_server->sessions[index].protocol_state =
+            PXE_PROTOCOL_STATE_HANDSHAKE;
+        game_server->sessions[index].socket = new_socket;
+        game_server->sessions[index].buffer_reader.read_pos = 0;
+        game_server->sessions[index].buffer_reader.chain = NULL;
+        game_server->sessions[index].last_buffer_chain = NULL;
+        game_server->sessions[index].process_buffer_chain = NULL;
+
+        WSAPOLLFD* new_event = game_server->events + game_server->nevents++;
+
+        new_event->fd = new_socket.fd;
+        new_event->events = POLLIN;
+        new_event->revents = 0;
+      } else {
+        fprintf(stderr, "Failed to accept new socket\n");
+      }
+    }
+
+    for (size_t i = 1; i < game_server->nevents;) {
+      if (game_server->events[i].revents != 0) {
+        pxe_session* session = &game_server->sessions[i - 1];
+
+        if (pxe_game_server_read_session(game_server, perm_arena, trans_arena,
+                                         session) == 0) {
+          pxe_game_free_session(game_server, session);
+          pxe_socket_disconnect(&session->socket);
+
+          // Swap the last session to the current position then decrement
+          // session count so this session is removed.
+          game_server->sessions[i] =
+              game_server->sessions[--game_server->session_count];
+
+          game_server->events[i] = game_server->events[--game_server->nevents];
+
+          // u8 bytes[] = ENDPOINT_BYTES(session->socket.endpoint);
+
+          // printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0],
+          //     bytes[1], bytes[2], bytes[3],
+          //   session->socket.endpoint.sin_port);
+
+          continue;
+        }
+      }
+
+      ++i;
+    }
+
+    fflush(stdout);
+  } else if (wsa_result < 0) {
+    fprintf(stderr, "WSA error: %d", wsa_result);
+  }
+
+  fflush(stdout);
+#endif
 }
