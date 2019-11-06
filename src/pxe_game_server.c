@@ -35,6 +35,14 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
                               pxe_memory_arena* perm_arena,
                               pxe_memory_arena* trans_arena);
 
+i64 pxe_get_time_ms() {
+#ifdef _WIN32
+  return GetTickCount64();
+#else
+  return 0;
+#endif
+}
+
 void pxe_strcpy(char* dest, char* src) {
   while (*src) {
     *dest++ = *src++;
@@ -265,6 +273,28 @@ bool32 pxe_game_send_position_and_look(pxe_session* session,
   }
 
   send_packet(&session->socket, trans_arena, 0x35, (char*)writer.buffer->data,
+              writer.buffer->size);
+
+  return 1;
+}
+
+bool32 pxe_game_send_keep_alive_packet(pxe_session* session,
+                                       pxe_memory_arena* trans_arena, i64 id) {
+  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
+  u8* payload = pxe_arena_alloc(trans_arena, sizeof(u64));
+
+  pxe_buffer_writer writer;
+
+  writer.buffer = buffer;
+  writer.buffer->data = payload;
+  writer.buffer->size = sizeof(u64);
+  writer.write_pos = 0;
+
+  if (pxe_buffer_write_u64(&writer, (u64)id) == 0) {
+    return 0;
+  }
+
+  send_packet(&session->socket, trans_arena, 0x20, (char*)writer.buffer->data,
               writer.buffer->size);
 
   return 1;
@@ -533,7 +563,8 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
           fprintf(stderr, "Failed to send chunk data\n");
         }
 
-        if (pxe_game_send_position_and_look(session, trans_arena, 0.0f, 100.0f, 0.0f) == 0) {
+        if (pxe_game_send_position_and_look(session, trans_arena, 0.0f, 100.0f,
+                                            0.0f) == 0) {
           fprintf(stderr, "Failed to send position\n");
         }
 #endif
@@ -685,6 +716,23 @@ bool32 pxe_game_server_read_session(pxe_game_server* game_server,
   return process_result != PXE_PROCESS_RESULT_DESTROY;
 }
 
+void pxe_game_server_tick(pxe_game_server* server, pxe_memory_arena* perm_arena,
+                          pxe_memory_arena* trans_arena) {
+  i64 current_time = pxe_get_time_ms();
+
+  for (size_t i = 0; i < server->session_count; ++i) {
+    pxe_session* session = server->sessions + i;
+
+    if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
+
+    if (current_time >= session->next_keep_alive) {
+      pxe_game_send_keep_alive_packet(session, trans_arena, current_time);
+
+      session->next_keep_alive = current_time + 10000;
+    }
+  }
+}
+
 void pxe_game_server_run(pxe_memory_arena* perm_arena,
                          pxe_memory_arena* trans_arena) {
   pxe_game_server* game_server = pxe_game_server_create(perm_arena);
@@ -709,11 +757,21 @@ void pxe_game_server_run(pxe_memory_arena* perm_arena,
   game_server->nevents = 1;
 #endif
 
+  i64 last_tick_time = 0;
+
   while (listen_socket->state == PXE_SOCKET_STATE_LISTENING) {
 #ifdef _WIN32
     pxe_game_server_wsa_poll(game_server, listen_socket, perm_arena,
                              trans_arena);
 #endif
+
+    i64 current_time = pxe_get_time_ms();
+
+    if (current_time > last_tick_time + 50) {
+      pxe_game_server_tick(game_server, perm_arena, trans_arena);
+      last_tick_time = current_time;
+    }
+
     pxe_arena_reset(trans_arena);
   }
 }
@@ -749,6 +807,7 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
         game_server->sessions[index].last_buffer_chain = NULL;
         game_server->sessions[index].process_buffer_chain = NULL;
         game_server->sessions[index].username[0] = 0;
+        game_server->sessions[index].next_keep_alive = 0;
 
         WSAPOLLFD* new_event = game_server->events + game_server->nevents++;
 

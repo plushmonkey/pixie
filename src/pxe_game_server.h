@@ -21,6 +21,7 @@ typedef struct pxe_session {
   pxe_socket socket;
 
   char username[20];
+  i64 next_keep_alive;
 
   pxe_buffer_chain_reader buffer_reader;
   // The chain of buffers that have been read and need to be fully processed.
