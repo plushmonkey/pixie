@@ -51,6 +51,8 @@ bool32 pxe_buffer_write_u16(pxe_buffer_writer* writer, u16 data);
 bool32 pxe_buffer_write_u32(pxe_buffer_writer* writer, u32 data);
 bool32 pxe_buffer_write_u64(pxe_buffer_writer* writer, u64 data);
 bool32 pxe_buffer_write_varint(pxe_buffer_writer* writer, i64 data);
+bool32 pxe_buffer_write_float(pxe_buffer_writer* writer, float data);
+bool32 pxe_buffer_write_double(pxe_buffer_writer* writer, double data);
 bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
                                       size_t length);
 bool32 pxe_buffer_write_raw_string(pxe_buffer_writer* writer, char* data,

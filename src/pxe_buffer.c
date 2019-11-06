@@ -486,6 +486,26 @@ bool32 pxe_buffer_write_varint(pxe_buffer_writer* writer, i64 data) {
   return 1;
 }
 
+bool32 pxe_buffer_write_float(pxe_buffer_writer* writer, float data) {
+  if (writer->write_pos + sizeof(data) > writer->buffer->size) return 0;
+
+  *(float*)(writer->buffer->data + writer->write_pos) = data;
+
+  writer->write_pos += sizeof(float);
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_double(pxe_buffer_writer* writer, double data) {
+  if (writer->write_pos + sizeof(data) > writer->buffer->size) return 0;
+
+  *(double*)(writer->buffer->data + writer->write_pos) = data;
+
+  writer->write_pos += sizeof(double);
+
+  return 1;
+}
+
 bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
                                       size_t length) {
   if (writer->write_pos + pxe_varint_size(length) > writer->buffer->size)

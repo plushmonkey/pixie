@@ -380,8 +380,8 @@ int main(int argc, char* argv[]) {
   pxe_arena_initialize(&perm_arena, perm_memory, perm_size);
 
   // test_connection(&trans_arena);
-  //pxe_game_server_run(&perm_arena, &trans_arena);
-  test_nbt_read(&perm_arena, &trans_arena, "out.nbt");
+  pxe_game_server_run(&perm_arena, &trans_arena);
+  //test_nbt_read(&perm_arena, &trans_arena, "out.nbt");
   //test_nbt_write(&perm_arena, &trans_arena, "out.nbt");
 
   return 0;
