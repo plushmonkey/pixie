@@ -36,6 +36,9 @@ bool32 pxe_buffer_chain_read_u16(pxe_buffer_chain_reader* reader, u16* out);
 bool32 pxe_buffer_chain_read_u32(pxe_buffer_chain_reader* reader, u32* out);
 bool32 pxe_buffer_chain_read_u64(pxe_buffer_chain_reader* reader, u64* out);
 bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader, i64* out);
+bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader, float* out);
+bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader, double* out);
+
 // This will set size only without moving the read_pos if out is NULL.
 bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader,
                                            char* out, size_t* size);

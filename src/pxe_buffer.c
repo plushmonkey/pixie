@@ -264,6 +264,98 @@ bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader,
   return 1;
 }
 
+bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader, float* out) {
+  pxe_buffer_chain* current = NULL;
+  size_t base_pos = 0;
+
+  if (pxe_buffer_get_pos_and_chain(reader, &current, &base_pos) == 0) {
+    return 0;
+  }
+
+  size_t read_index = reader->read_pos - base_pos;
+
+  float data = 0.0f;
+
+  // This lies right on the boundary of the two chains
+  if (read_index + sizeof(float) > current->buffer->size) {
+    if (current->next == NULL) {
+      // There's not enough data to read the u32 if there's no next chain.
+      return 0;
+    }
+
+    char buf[4] = { 0 };
+
+    size_t first_len = current->buffer->size - read_index;
+    size_t second_len = array_size(buf) - first_len;
+
+    for (size_t i = 0; i < first_len; ++i) {
+      buf[i] = (char)current->buffer->data[read_index + i];
+    }
+
+    current = current->next;
+
+    for (size_t i = 0; i < second_len; ++i) {
+      buf[i] = (char)current->buffer->data[i];
+    }
+
+    data = *(float*)buf;
+  } else {
+    data = *(float*)&current->buffer->data[read_index];
+  }
+
+  *out = data;
+
+  reader->read_pos += sizeof(float);
+
+  return 1;
+}
+
+bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader, double* out) {
+  pxe_buffer_chain* current = NULL;
+  size_t base_pos = 0;
+
+  if (pxe_buffer_get_pos_and_chain(reader, &current, &base_pos) == 0) {
+    return 0;
+  }
+
+  size_t read_index = reader->read_pos - base_pos;
+
+  double data = 0.0;
+
+  // This lies right on the boundary of the two chains
+  if (read_index + sizeof(double) > current->buffer->size) {
+    if (current->next == NULL) {
+      // There's not enough data to read the u32 if there's no next chain.
+      return 0;
+    }
+
+    char buf[8] = { 0 };
+
+    size_t first_len = current->buffer->size - read_index;
+    size_t second_len = array_size(buf) - first_len;
+
+    for (size_t i = 0; i < first_len; ++i) {
+      buf[i] = (char)current->buffer->data[read_index + i];
+    }
+
+    current = current->next;
+
+    for (size_t i = 0; i < second_len; ++i) {
+      buf[i] = (char)current->buffer->data[i];
+    }
+
+    data = *(double*)buf;
+  } else {
+    data = *(double*)&current->buffer->data[read_index];
+  }
+
+  *out = data;
+
+  reader->read_pos += sizeof(double);
+
+  return 1;
+}
+
 bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader,
                                            char* out, size_t* size) {
   i64 str_len;

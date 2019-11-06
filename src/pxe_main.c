@@ -3,6 +3,7 @@
 #include "pxe_alloc.h"
 #include "pxe_buffer.h"
 #include "pxe_game_server.h"
+#include "pxe_nbt.h"
 #include "pxe_socket.h"
 #include "pxe_varint.h"
 
@@ -280,8 +281,31 @@ void test_connection(pxe_memory_arena* arena) {
   }
 }
 
-void test_buffers(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena) {
+void test_nbt(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena, const char* filename) {
+  FILE* f;
+  fopen_s(&f, filename, "rb");
 
+  if (f == NULL) {
+    fprintf(stderr, "Could not open test nbt file.\n");
+    return;
+  }
+
+  fseek(f, 0, SEEK_END);
+  long file_size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  char* data = pxe_arena_alloc(perm_arena, file_size);
+  fread(data, 1, file_size, f);
+
+  fclose(f);
+
+  pxe_nbt_tag_compound* root = pxe_arena_push_type(perm_arena, pxe_nbt_tag_compound);
+
+  if (pxe_nbt_parse(data, file_size, trans_arena, root)) {
+    printf("Successfully parsed NBT.\n");
+  } else {
+    fprintf(stderr, "Failed to parse NBT.\n");
+  }
 }
 
 int main(int argc, char* argv[]) {
@@ -306,8 +330,9 @@ int main(int argc, char* argv[]) {
   pxe_arena_initialize(&perm_arena, perm_memory, perm_size);
 
   // test_connection(&trans_arena);
-  pxe_game_server_run(&perm_arena, &trans_arena);
-  //  test_buffers(&perm_arena, &trans_arena);
+  //pxe_game_server_run(&perm_arena, &trans_arena);
+  test_nbt(&perm_arena, &trans_arena, "hello.nbt");
+  //test_nbt(&perm_arena, &trans_arena, "advanced.nbt");
 
   return 0;
 }

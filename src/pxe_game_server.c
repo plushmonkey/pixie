@@ -101,6 +101,14 @@ void pxe_game_free_session(pxe_game_server* server, pxe_session* session) {
   session->last_buffer_chain = NULL;
 }
 
+bool32 pxe_game_send_blank_chunk_data(pxe_session* session, pxe_memory_arena* trans_arena, i32 chunk_x, i32 chunk_z) {
+  bool32 full_chunk = 1;
+  i64 bitmask = 0;
+
+
+  return 0;
+}
+
 bool32 pxe_game_send_join_packet(pxe_session* session,
                                  pxe_memory_arena* trans_arena) {
   static i32 next_entity_id = 1;
