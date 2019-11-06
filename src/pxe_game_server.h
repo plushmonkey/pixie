@@ -20,6 +20,8 @@ typedef struct pxe_session {
   pxe_protocol_state protocol_state;
   pxe_socket socket;
 
+  char username[20];
+
   pxe_buffer_chain_reader buffer_reader;
   // The chain of buffers that have been read and need to be fully processed.
   struct pxe_buffer_chain* process_buffer_chain;

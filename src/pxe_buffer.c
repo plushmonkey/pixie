@@ -1,6 +1,7 @@
 #include "pxe_buffer.h"
 
 #include "pxe_alloc.h"
+#include "pxe_varint.h"
 
 #include <stdlib.h>
 
@@ -309,6 +310,105 @@ bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader,
   }
 
   reader->read_pos += str_len;
+
+  return 1;
+}
+
+bool32 pxe_buffer_chain_read_raw_string(pxe_buffer_chain_reader* reader,
+                                        char* out, size_t size) {
+  pxe_buffer_chain* current = NULL;
+  size_t base_pos = 0;
+
+  if (pxe_buffer_get_pos_and_chain(reader, &current, &base_pos) == 0) {
+    return 0;
+  }
+
+  size_t read_index = reader->read_pos - base_pos;
+
+  for (size_t i = 0; i < (size_t)size;) {
+    out[i] = (char)current->buffer->data[read_index];
+
+    ++read_index;
+
+    if (read_index > current->buffer->size) {
+      if (current->next == NULL) {
+        return 0;
+      }
+
+      current = current->next;
+      read_index = 0;
+      continue;
+    }
+
+    ++i;
+  }
+
+  reader->read_pos += size;
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_u8(pxe_buffer_writer* writer, u8 data) {
+  if (writer->write_pos + sizeof(data) > writer->buffer->size) return 0;
+
+  writer->buffer->data[writer->write_pos++] = data;
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_u16(pxe_buffer_writer* writer, u16 data) {
+  if (writer->write_pos + sizeof(data) > writer->buffer->size) return 0;
+
+  *(u16*)(writer->buffer->data + writer->write_pos) = bswap_16(data);
+
+  writer->write_pos += sizeof(u16);
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_u32(pxe_buffer_writer* writer, u32 data) {
+  if (writer->write_pos + sizeof(data) > writer->buffer->size) return 0;
+
+  *(u32*)(writer->buffer->data + writer->write_pos) = bswap_32(data);
+
+  writer->write_pos += sizeof(u32);
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_u64(pxe_buffer_writer* writer, u64 data) {
+  if (writer->write_pos + sizeof(data) > writer->buffer->size) return 0;
+
+  *(u64*)(writer->buffer->data + writer->write_pos) = bswap_64(data);
+
+  writer->write_pos += sizeof(u64);
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_varint(pxe_buffer_writer* writer, i64 data) {
+  writer->write_pos += pxe_varint_write(data, (char*)writer->buffer->data);
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
+                                      size_t length) {
+  if (writer->write_pos + pxe_varint_size(length) > writer->buffer->size)
+    return 0;
+
+  size_t length_size =
+      pxe_varint_write(length, (char*)writer->buffer->data + writer->write_pos);
+
+  writer->write_pos += length_size;
+
+  if (writer->write_pos + length > writer->buffer->size) return 0;
+
+  for (size_t i = 0; i < length; ++i) {
+    writer->buffer->data[writer->write_pos + i] = data[i];
+  }
+
+  writer->write_pos += length;
 
   return 1;
 }

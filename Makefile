@@ -1,4 +1,4 @@
-CFLAGS=
+CFLAGS=-O2
 LIBS=-lws2_32
 CC=clang
 

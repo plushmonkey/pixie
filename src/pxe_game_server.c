@@ -5,8 +5,11 @@
 #include "pxe_varint.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #define READ_BUFFER_SIZE 512
+
+#define PXE_OUTPUT_CONNECTIONS 0
 
 typedef enum {
   PXE_PROCESS_RESULT_CONTINUE,
@@ -18,9 +21,9 @@ static const char pxe_ping_response[] =
     "{\"version\": { \"name\": \"1.14.4\", \"protocol\": 498 }, \"players\": "
     "{\"max\": 420, \"online\": 69, \"sample\": [{\"name\": \"plushmonkey\", "
     "\"id\": \"e812180e-a8aa-4c9f-a8b3-07f591b8de20\"}]}, \"description\": "
-    "{\"text\": \"pixie ping server\"}}";
+    "{\"text\": \"pixie server\"}}";
 static const char pxe_login_response[] =
-    "{\"text\": \"pixie ping server has no game server.\"}";
+    "{\"text\": \"pixie server has no implemented game server.\"}";
 
 size_t write_string(char* dest, const char* src, size_t len);
 void send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
@@ -30,6 +33,23 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
                               pxe_socket* listen_socket,
                               pxe_memory_arena* perm_arena,
                               pxe_memory_arena* trans_arena);
+
+void pxe_strcpy(char* dest, char* src) {
+  while (*src) {
+    *dest++ = *src++;
+  }
+}
+
+void pxe_generate_uuid(char* result) {
+  // e812180e-a8aa-4c9f-a8b3-07f591b8de20
+  for (size_t i = 0; i < 36; ++i) {
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      *result++ = '-';
+    } else {
+      *result++ = (rand() % 9) + '0';
+    }
+  }
+}
 
 static size_t allocated_buffers = 0;
 
@@ -81,6 +101,68 @@ void pxe_game_free_session(pxe_game_server* server, pxe_session* session) {
   session->last_buffer_chain = NULL;
 }
 
+bool32 pxe_game_send_join_packet(pxe_session* session,
+                                 pxe_memory_arena* trans_arena) {
+  static i32 next_entity_id = 1;
+
+  i32 eid = next_entity_id++;
+  u8 gamemode = 0;
+  i32 dimension = 0;
+  u8 max_players = 0xFF;
+  char level_type[] = "default";
+  i32 view_distance = 16;
+  bool32 reduced_debug = 0;
+
+  size_t level_len = array_size(level_type) - 1;
+
+  size_t size = sizeof(eid) + sizeof(gamemode) + sizeof(dimension) +
+                sizeof(max_players) + pxe_varint_size(level_len) + level_len +
+                pxe_varint_size(view_distance) + 1;
+
+  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
+  u8* payload = pxe_arena_alloc(trans_arena, size);
+
+  pxe_buffer_writer writer;
+
+  writer.buffer = buffer;
+  writer.buffer->data = payload;
+  writer.buffer->size = size;
+  writer.write_pos = 0;
+
+  if (!pxe_buffer_write_u32(&writer, eid)) {
+    return 0;
+  }
+
+  if (!pxe_buffer_write_u8(&writer, gamemode)) {
+    return 0;
+  }
+
+  if (!pxe_buffer_write_u32(&writer, dimension)) {
+    return 0;
+  }
+
+  if (!pxe_buffer_write_u8(&writer, max_players)) {
+    return 0;
+  }
+
+  if (!pxe_buffer_write_length_string(&writer, level_type, level_len)) {
+    return 0;
+  }
+
+  if (!pxe_buffer_write_varint(&writer, view_distance)) {
+    return 0;
+  }
+
+  if (!pxe_buffer_write_u8(&writer, (u8)reduced_debug)) {
+    return 0;
+  }
+
+  send_packet(&session->socket, trans_arena, 0x25, (char*)writer.buffer->data,
+              writer.buffer->size);
+
+  return 1;
+}
+
 pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
                                             pxe_session* session,
                                             pxe_memory_arena* trans_arena) {
@@ -89,10 +171,13 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
   session->buffer_reader.chain = session->process_buffer_chain;
 
   i64 pkt_len, pkt_id;
+  size_t pkt_len_size = 0;
 
   if (pxe_buffer_chain_read_varint(reader, &pkt_len) == 0) {
     return PXE_PROCESS_RESULT_CONSUMED;
   }
+
+  pkt_len_size = pxe_varint_size(pkt_len);
 
   if (pxe_buffer_chain_read_varint(reader, &pkt_id) == 0) {
     return PXE_PROCESS_RESULT_CONSUMED;
@@ -180,8 +265,37 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
         username[username_len] = 0;
 
+        if (username_len > 16) {
+          fprintf(stderr, "Illegal username: %.20s\n", username);
+          return PXE_PROCESS_RESULT_DESTROY;
+        }
+
+        pxe_strcpy(session->username, username);
+
         // printf("Login request from %s.\n", username);
 
+#if 1
+        char uuid[36];
+        pxe_generate_uuid(uuid);
+
+        char* response = pxe_arena_alloc(
+            trans_arena, pxe_varint_size(username_len) + username_len +
+                             pxe_varint_size(36) + 36);
+
+        size_t index = write_string(response, uuid, 36);
+        index +=
+            write_string(response + index, session->username, username_len);
+
+        send_packet(&session->socket, trans_arena, 0x02, response, index);
+
+        if (!pxe_game_send_join_packet(session, trans_arena)) {
+          fprintf(stderr, "Error writing join packet.\n");
+        } else {
+          printf("Sent join packet to %s\n", username);
+        }
+
+        session->protocol_state = PXE_PROTOCOL_STATE_PLAY;
+#else
         size_t data_size = array_size(pxe_login_response);
         size_t response_size = pxe_varint_size(data_size) + data_size;
         char* response_str = pxe_arena_alloc(trans_arena, response_size);
@@ -189,16 +303,104 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         // Send disconnect message
         write_string(response_str, pxe_login_response, data_size);
 
-        send_packet(&session->socket, trans_arena, 0, response_str,
+        send_packet(&session->socket, trans_arena, 0x1A, response_str,
                     response_size);
         return PXE_PROCESS_RESULT_DESTROY;
+#endif
       } break;
       default: {
-        fprintf(stderr, "Received unhandled packet in state %d\n",
+        fprintf(stderr, "Received unhandled packet %lld in state %d\n", pkt_id,
                 session->protocol_state);
         return PXE_PROCESS_RESULT_DESTROY;
       }
     }
+  } else if (session->protocol_state == PXE_PROTOCOL_STATE_PLAY) {
+    switch (pkt_id) {
+      case 0x05: {
+        size_t locale_len;
+        if (pxe_buffer_chain_read_length_string(reader, NULL, &locale_len) ==
+            0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        char* locale = pxe_arena_alloc(trans_arena, locale_len + 1);
+        if (pxe_buffer_chain_read_length_string(reader, locale, &locale_len) ==
+            0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        locale[locale_len] = 0;
+
+        u8 view_distance;
+        if (pxe_buffer_chain_read_u8(reader, &view_distance) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        i64 chat_mode;
+        if (pxe_buffer_chain_read_varint(reader, &chat_mode) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        bool32 chat_colors = 0;
+        if (pxe_buffer_chain_read_u8(reader, (u8*)&chat_colors) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        u8 skin_parts;
+        if (pxe_buffer_chain_read_u8(reader, &skin_parts) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        i64 main_hand;
+        if (pxe_buffer_chain_read_varint(reader, &main_hand) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        printf("Received client settings from %s.\n", session->username);
+
+        // Send terrain
+      } break;
+      case 0x0B: { // Plugin message
+        size_t channel_len;
+        if (pxe_buffer_chain_read_length_string(reader, NULL, &channel_len) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        char* channel = pxe_arena_alloc(trans_arena, channel_len + 1);
+
+        if (pxe_buffer_chain_read_length_string(reader, channel, &channel_len) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        channel[channel_len] = 0;
+
+        size_t message_size = pkt_len - reader->read_pos + pkt_len_size;
+        char* plugin_message = pxe_arena_alloc(trans_arena, message_size + 1);
+
+        if (pxe_buffer_chain_read_raw_string(reader, plugin_message, message_size) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        plugin_message[message_size] = 0;
+
+        printf("plugin message from %s: (%s, %s)\n", session->username, channel, plugin_message);
+
+#if 1
+        return PXE_PROCESS_RESULT_DESTROY;
+#endif
+      } break;
+      default: {
+        fprintf(stderr, "Received unhandled packet %lld in state %d\n", pkt_id,
+                session->protocol_state);
+#if 1
+        // Skip over this packet
+        reader->read_pos = pkt_len;
+#else
+        return PXE_PROCESS_RESULT_DESTROY;
+#endif
+      }
+    }
+
   } else {
     printf("Unhandled protocol state\n");
     return PXE_PROCESS_RESULT_DESTROY;
@@ -343,10 +545,12 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
       pxe_socket new_socket = {0};
 
       if (pxe_socket_accept(listen_socket, &new_socket)) {
-        // u8 bytes[] = ENDPOINT_BYTES(new_socket.endpoint);
+#if PXE_OUTPUT_CONNECTIONS
+        u8 bytes[] = ENDPOINT_BYTES(new_socket.endpoint);
 
-        // printf("Accepted %hhu.%hhu.%hhu.%hhu:%hu\n", bytes[0], bytes[1],
-        // bytes[2], bytes[3], new_socket.endpoint.sin_port);
+        printf("Accepted %hhu.%hhu.%hhu.%hhu:%hu\n", bytes[0], bytes[1],
+               bytes[2], bytes[3], new_socket.endpoint.sin_port);
+#endif
 
         pxe_socket_set_block(&new_socket, 0);
 
@@ -359,6 +563,7 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
         game_server->sessions[index].buffer_reader.chain = NULL;
         game_server->sessions[index].last_buffer_chain = NULL;
         game_server->sessions[index].process_buffer_chain = NULL;
+        game_server->sessions[index].username[0] = 0;
 
         WSAPOLLFD* new_event = game_server->events + game_server->nevents++;
 
@@ -386,12 +591,12 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
 
           game_server->events[i] = game_server->events[--game_server->nevents];
 
-          // u8 bytes[] = ENDPOINT_BYTES(session->socket.endpoint);
+#if PXE_OUTPUT_CONNECTIONS
+          u8 bytes[] = ENDPOINT_BYTES(session->socket.endpoint);
 
-          // printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0],
-          //     bytes[1], bytes[2], bytes[3],
-          //   session->socket.endpoint.sin_port);
-
+          printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0], bytes[1],
+                 bytes[2], bytes[3], session->socket.endpoint.sin_port);
+#endif
           continue;
         }
       }

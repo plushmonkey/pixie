@@ -20,6 +20,11 @@ typedef struct pxe_buffer_chain_reader {
   pxe_buffer_chain* chain;
 } pxe_buffer_chain_reader;
 
+typedef struct pxe_buffer_writer {
+  size_t write_pos;
+  pxe_buffer* buffer;
+} pxe_buffer_writer;
+
 pxe_buffer_chain* pxe_chain_insert(struct pxe_memory_arena* arena,
                                    pxe_buffer_chain* chain, u8* data,
                                    size_t size);
@@ -34,5 +39,15 @@ bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader, i64* out);
 // This will set size only without moving the read_pos if out is NULL.
 bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader,
                                            char* out, size_t* size);
+bool32 pxe_buffer_chain_read_raw_string(pxe_buffer_chain_reader* reader,
+                                        char* out, size_t size);
+
+bool32 pxe_buffer_write_u8(pxe_buffer_writer* writer, u8 data);
+bool32 pxe_buffer_write_u16(pxe_buffer_writer* writer, u16 data);
+bool32 pxe_buffer_write_u32(pxe_buffer_writer* writer, u32 data);
+bool32 pxe_buffer_write_u64(pxe_buffer_writer* writer, u64 data);
+bool32 pxe_buffer_write_varint(pxe_buffer_writer* writer, i64 data);
+bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
+                                      size_t length);
 
 #endif
