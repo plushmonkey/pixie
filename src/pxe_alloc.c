@@ -25,6 +25,17 @@ void* pxe_arena_alloc(pxe_memory_arena* arena, size_t size) {
   return result;
 }
 
+void* pxe_arena_alloc_unaligned(pxe_memory_arena* arena, size_t size) {
+  void* result = arena->current;
+
+  assert(arena->size + size < arena->max_size);
+
+  arena->current = (u8*)arena->current + size;
+  arena->size += size;
+
+  return result;
+}
+
 void pxe_arena_reset(pxe_memory_arena* arena) {
   arena->current = arena->base;
   arena->size = 0;

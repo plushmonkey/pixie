@@ -16,5 +16,6 @@ typedef uint64_t u64;
 typedef i32 bool32;
 
 #define array_size(arr) (sizeof((arr)) / (sizeof(*(arr))))
+#define array_string_size(arr) ((sizeof((arr)) / (sizeof(*(arr)))) - 1)
 
 #endif

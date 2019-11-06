@@ -264,7 +264,8 @@ bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader,
   return 1;
 }
 
-bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader, float* out) {
+bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader,
+                                   float* out) {
   pxe_buffer_chain* current = NULL;
   size_t base_pos = 0;
 
@@ -283,7 +284,7 @@ bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader, float* out) 
       return 0;
     }
 
-    char buf[4] = { 0 };
+    char buf[4] = {0};
 
     size_t first_len = current->buffer->size - read_index;
     size_t second_len = array_size(buf) - first_len;
@@ -310,7 +311,8 @@ bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader, float* out) 
   return 1;
 }
 
-bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader, double* out) {
+bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader,
+                                    double* out) {
   pxe_buffer_chain* current = NULL;
   size_t base_pos = 0;
 
@@ -329,7 +331,7 @@ bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader, double* out
       return 0;
     }
 
-    char buf[8] = { 0 };
+    char buf[8] = {0};
 
     size_t first_len = current->buffer->size - read_index;
     size_t second_len = array_size(buf) - first_len;
@@ -494,6 +496,19 @@ bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
 
   writer->write_pos += length_size;
 
+  if (writer->write_pos + length > writer->buffer->size) return 0;
+
+  for (size_t i = 0; i < length; ++i) {
+    writer->buffer->data[writer->write_pos + i] = data[i];
+  }
+
+  writer->write_pos += length;
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_raw_string(pxe_buffer_writer* writer, char* data,
+                                   size_t length) {
   if (writer->write_pos + length > writer->buffer->size) return 0;
 
   for (size_t i = 0; i < length; ++i) {

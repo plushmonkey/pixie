@@ -281,7 +281,7 @@ void test_connection(pxe_memory_arena* arena) {
   }
 }
 
-void test_nbt(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena, const char* filename) {
+void test_nbt_read(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena, const char* filename) {
   FILE* f;
   fopen_s(&f, filename, "rb");
 
@@ -308,6 +308,56 @@ void test_nbt(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena, const
   }
 }
 
+void test_nbt_write(pxe_memory_arena* perm_arena, pxe_memory_arena* trans_arena, const char* filename) {
+  FILE* f;
+  fopen_s(&f, filename, "wb");
+
+  if (f == NULL) {
+    fprintf(stderr, "Could not open test output nbt file.\n");
+    return;
+  }
+
+  pxe_nbt_tag_compound* root = pxe_arena_push_type(perm_arena, pxe_nbt_tag_compound);
+
+  char hello_world[] = "hello world";
+  char tag_name[] = "name";
+  char string_tag_data[] = "Bananrama";
+
+  root->name = hello_world;
+  root->name_length = array_string_size(hello_world);
+  root->ntags = 0;
+
+  
+  char* data;
+  size_t size;
+
+  pxe_nbt_tag_string string_tag;
+
+  string_tag.data = string_tag_data;
+  string_tag.length = array_string_size(string_tag_data);
+
+  pxe_nbt_tag tag;
+
+  tag.name = tag_name;
+  tag.name_length = array_string_size(tag_name);
+  tag.type = PXE_NBT_TAG_TYPE_STRING;
+  tag.tag = &string_tag;
+
+  
+  pxe_nbt_tag_compound_add(root, tag);
+
+  
+  if (pxe_nbt_write(root, perm_arena, &data, &size) == 0) {
+    fprintf(stderr, "Failed to construct nbt output.\n");
+  } else {
+    printf("Constructed nbt output.\n");
+
+    fwrite(data, 1, size, f);
+  }
+
+  fclose(f);
+}
+
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
   WSADATA wsa;
@@ -331,8 +381,8 @@ int main(int argc, char* argv[]) {
 
   // test_connection(&trans_arena);
   //pxe_game_server_run(&perm_arena, &trans_arena);
-  test_nbt(&perm_arena, &trans_arena, "hello.nbt");
-  //test_nbt(&perm_arena, &trans_arena, "advanced.nbt");
+  test_nbt_read(&perm_arena, &trans_arena, "out.nbt");
+  //test_nbt_write(&perm_arena, &trans_arena, "out.nbt");
 
   return 0;
 }

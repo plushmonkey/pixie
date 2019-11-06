@@ -13,6 +13,7 @@ typedef struct pxe_memory_arena {
 void pxe_arena_initialize(pxe_memory_arena* arena, void* memory,
                           size_t max_size);
 void* pxe_arena_alloc(pxe_memory_arena* arena, size_t size);
+void* pxe_arena_alloc_unaligned(pxe_memory_arena* arena, size_t size);
 void pxe_arena_reset(pxe_memory_arena* arena);
 
 #define pxe_arena_push_type(arena, type) \

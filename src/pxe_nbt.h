@@ -40,11 +40,6 @@ typedef struct pxe_nbt_tag_compound {
   size_t name_length;
 } pxe_nbt_tag_compound;
 
-typedef struct pxe_nbt_tag_string {
-  char* data;
-  size_t length;
-} pxe_nbt_tag_string;
-
 typedef struct pxe_nbt_tag_byte {
   u8 data;
 } pxe_nbt_tag_byte;
@@ -69,8 +64,38 @@ typedef struct pxe_nbt_tag_double {
   double data;
 } pxe_nbt_tag_double;
 
+typedef struct pxe_nbt_tag_byte_array {
+  i8* data;
+  size_t length;
+} pxe_nbt_tag_byte_array;
+
+typedef struct pxe_nbt_tag_string {
+  char* data;
+  size_t length;
+} pxe_nbt_tag_string;
+
+typedef struct pxe_nbt_tag_list {
+  pxe_nbt_tag_type type;
+  size_t length;
+  pxe_nbt_tag* tags;
+} pxe_nbt_tag_list;
+
+typedef struct pxe_nbt_tag_int_array {
+  i32* data;
+  size_t length;
+} pxe_nbt_tag_int_array;
+
+typedef struct pxe_nbt_tag_long_array {
+  i64* data;
+  size_t length;
+} pxe_nbt_tag_long_array;
+
 struct pxe_memory_arena;
 
-bool32 pxe_nbt_parse(char* data, size_t size, struct pxe_memory_arena* arena, pxe_nbt_tag_compound* result);
+bool32 pxe_nbt_parse(char* data, size_t size, struct pxe_memory_arena* arena,
+                     pxe_nbt_tag_compound* result);
+bool32 pxe_nbt_write(pxe_nbt_tag_compound* compound,
+                     struct pxe_memory_arena* arena, char** out, size_t* size);
+void pxe_nbt_tag_compound_add(pxe_nbt_tag_compound* compound, pxe_nbt_tag tag);
 
 #endif
