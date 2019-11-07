@@ -14,7 +14,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-
+#include <errno.h>
 #define closesocket close
 #endif
 
@@ -24,6 +24,7 @@ typedef unsigned long long pxe_socket_handle;
 typedef unsigned int pxe_socket_handle;
 #endif
 
+#ifdef _MSC_VER
 #define ENDPOINT_BYTES(endpoint)              \
   {                                           \
     (endpoint).sin_addr.S_un.S_un_b.s_b1,     \
@@ -31,6 +32,15 @@ typedef unsigned int pxe_socket_handle;
         (endpoint).sin_addr.S_un.S_un_b.s_b3, \
         (endpoint).sin_addr.S_un.S_un_b.s_b4  \
   }
+#else
+#define ENDPOINT_BYTES(endpoint)              \
+  {                                           \
+    (endpoint).sin_addr.s_addr & 0xFF,     \
+        ((endpoint).sin_addr.s_addr & 0xFF00) >> 8, \
+        ((endpoint).sin_addr.s_addr & 0xFF0000) >> 16, \
+        ((endpoint).sin_addr.s_addr & 0xFF000000 >> 24)  \
+  }
+#endif
 
 typedef enum {
   PXE_SOCKET_STATE_DISCONNECTED = 0,

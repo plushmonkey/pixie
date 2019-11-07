@@ -5,14 +5,19 @@
 
 #include <stdio.h>
 
-#define PXE_INVALID_SOCKET (socket_handle)(~0)
-#define PXE_SOCKET_ERROR (socket_handle)(-1)
+#define PXE_INVALID_SOCKET (pxe_socket_handle)(~0)
+#define PXE_SOCKET_ERROR (pxe_socket_handle)(-1)
 
 #ifdef _WIN32
 #define PXE_WOULDBLOCK WSAEWOULDBLOCK
 #define MSG_DONTWAIT 0
 #else
+#include <fcntl.h>
 #define PXE_WOULDBLOCK EWOULDBLOCK
+#endif
+
+#ifndef _MSC_VER
+int sprintf_s(char* str, size_t str_size, char* format, ...);
 #endif
 
 static int pxe_get_error_code() {
@@ -93,6 +98,9 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
     return 0;
   }
 
+  int optval = 1;
+  setsockopt(sock->fd, SOL_SOCKET, SO_REUSEADDR, (char*)&optval, sizeof(optval));
+
   char service[32];
 
   sprintf_s(service, array_size(service), "%d", port);
@@ -120,12 +128,13 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
 bool32 pxe_socket_accept(pxe_socket* socket, pxe_socket* result) {
   struct sockaddr_in their_addr;
 
-  int addr_size = (int)sizeof(their_addr);
+  socklen_t addr_size = (int)sizeof(their_addr);
 
+  pxe_socket_set_block(socket, 0);
   pxe_socket_handle new_fd =
       accept(socket->fd, (struct sockaddr*)&their_addr, &addr_size);
 
-  if (new_fd == SOCKET_ERROR) {
+  if (new_fd == PXE_SOCKET_ERROR) {
     return 0;
   }
 
@@ -149,7 +158,7 @@ size_t pxe_socket_send(pxe_socket* socket, const char* data, size_t size) {
         send(socket->fd, data + total_sent, (int)(size - total_sent), 0);
 
     if (current_sent <= 0) {
-      if (current_sent == SOCKET_ERROR) {
+      if (current_sent == PXE_SOCKET_ERROR) {
         socket->error_code = pxe_get_error_code();
         socket->state = PXE_SOCKET_STATE_ERROR;
       } else {
@@ -231,16 +240,10 @@ void pxe_socket_set_block(pxe_socket* socket, bool32 block) {
 #ifdef _WIN32
   ioctlsocket(socket->fd, FIONBIO, &mode);
 #else
-  int opts = fcntl(socket->fd, F_GETFL);
+  int flags = fcntl(socket->fd, F_GETFL, 0);
 
-  if (opts < 0) return;
+  flags = block ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
 
-  if (block) {
-    opts |= O_NONBLOCK;
-  } else {
-    opts &= ~O_NONBLOCK;
-  }
-
-  fcntl(m_Handle, F_SETFL, opts);
+  fcntl(socket->fd, F_SETFL, flags);
 #endif
 }
