@@ -29,7 +29,7 @@ pxe_buffer_chain* pxe_chain_insert(struct pxe_memory_arena* arena,
                                    pxe_buffer_chain* chain, u8* data,
                                    size_t size);
 
-size_t pxe_chain_size(pxe_buffer_chain* chain);
+size_t pxe_buffer_chain_size(pxe_buffer_chain* chain);
 
 bool32 pxe_buffer_chain_read_u8(pxe_buffer_chain_reader* reader, u8* out);
 bool32 pxe_buffer_chain_read_u16(pxe_buffer_chain_reader* reader, u16* out);

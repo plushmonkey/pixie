@@ -31,7 +31,7 @@ pxe_buffer_chain* pxe_chain_insert(pxe_memory_arena* arena,
   return new_chain;
 }
 
-size_t pxe_chain_size(pxe_buffer_chain* chain) {
+size_t pxe_buffer_chain_size(pxe_buffer_chain* chain) {
   if (chain == NULL) return 0;
 
   size_t size = 0;

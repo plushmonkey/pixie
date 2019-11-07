@@ -107,7 +107,7 @@ pxe_buffer* generate_packet(pxe_memory_arena* arena, int packet_id,
 
 pxe_buffer_chain* generate_packet_chain(pxe_memory_arena* arena, int packet_id,
                                         pxe_buffer_chain* payload_chain) {
-  size_t payload_size = pxe_chain_size(payload_chain);
+  size_t payload_size = pxe_buffer_chain_size(payload_chain);
   size_t id_size = pxe_varint_size(packet_id);
   size_t length_size = pxe_varint_size(payload_size + id_size);
 

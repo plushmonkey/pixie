@@ -107,6 +107,8 @@ void pxe_game_free_session(pxe_game_server* server, pxe_session* session) {
     current = next;
   }
 
+  session->buffer_reader.chain = NULL;
+  session->buffer_reader.read_pos = 0;
   session->process_buffer_chain = NULL;
   session->last_buffer_chain = NULL;
 }
@@ -370,7 +372,8 @@ bool32 pxe_game_server_send_chat(pxe_game_server* server,
   u8 position = 0;
 
   size_t data_len =
-      sprintf_s(data, array_size(data), "{\"text\":\"%s\", \"color\": \"%s\"}", message, color);
+      sprintf_s(data, array_size(data), "{\"text\":\"%s\", \"color\": \"%s\"}",
+                message, color);
 
   size_t payload_len = data_len + pxe_varint_size(data_len) + sizeof(u8);
   pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
@@ -550,9 +553,9 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         }
 
         if (pxe_game_send_position_and_look(session, trans_arena, 0.0f, 100.0f,
-          0.0f) == 0) {
+                                            0.0f) == 0) {
           fprintf(stderr, "Failed to send position\n");
-      }
+        }
 #endif
 
 #else
@@ -576,6 +579,13 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
     }
   } else if (session->protocol_state == PXE_PROTOCOL_STATE_PLAY) {
     switch (pkt_id) {
+      case 0x00: {  // Teleport confirm
+        i64 teleport_id;
+
+        if (pxe_buffer_chain_read_varint(reader, &teleport_id) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+      } break;
       case 0x03: {  // Chat
         size_t message_len;
         if (pxe_buffer_chain_read_length_string(reader, NULL, &message_len) ==
@@ -597,7 +607,8 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
             sprintf_s(output_message, array_size(output_message), "%s> %s",
                       session->username, message);
 
-        pxe_game_server_send_chat(game_server, trans_arena, output_message, output_message_len, "white");
+        pxe_game_server_send_chat(game_server, trans_arena, output_message,
+                                  output_message_len, "white");
       } break;
       case 0x05: {
         size_t locale_len;
@@ -657,7 +668,8 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
         channel[channel_len] = 0;
 
-        size_t message_size = pkt_len - reader->read_pos + pkt_len_size;
+        size_t message_size =
+            pkt_len - pkt_len_size - channel_len - pxe_varint_size(channel_len);
         char* plugin_message = pxe_arena_alloc(trans_arena, message_size + 1);
 
         if (pxe_buffer_chain_read_raw_string(reader, plugin_message,
@@ -674,6 +686,39 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         return PXE_PROCESS_RESULT_DESTROY;
 #endif
       } break;
+      case 0x12: {  // Player position and look
+        double x;
+        double y;
+        double z;
+        float yaw;
+        float pitch;
+        bool32 on_ground;
+
+        if (pxe_buffer_chain_read_double(reader, &x) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        if (pxe_buffer_chain_read_double(reader, &y) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        if (pxe_buffer_chain_read_double(reader, &z) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        if (pxe_buffer_chain_read_float(reader, &yaw) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        if (pxe_buffer_chain_read_float(reader, &pitch) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        if (pxe_buffer_chain_read_u8(reader, (u8*)&on_ground) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+      } break;
       default: {
 #if 1
         fprintf(stderr, "Received unhandled packet %lld in state %d\n", pkt_id,
@@ -681,8 +726,14 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 #endif
 
 #if 1
-        // Skip over this packet
-        reader->read_pos += pkt_len - pkt_len_size;
+        size_t payload_size = pkt_len - pxe_varint_size(pkt_id);
+        size_t buffer_size = pxe_buffer_chain_size(reader->chain);
+        if (buffer_size >= reader->read_pos + payload_size) {
+          // Skip over this packet
+          reader->read_pos += payload_size;
+        } else {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
 #else
         return PXE_PROCESS_RESULT_DESTROY;
 #endif
@@ -777,9 +828,14 @@ bool32 pxe_game_server_read_session(pxe_game_server* game_server,
         pxe_game_process_session(game_server, session, trans_arena);
 
     if (process_result == PXE_PROCESS_RESULT_CONSUMED) {
-      // Revert the read position because the last process didn't fully
-      // read a packet.
-      session->buffer_reader.read_pos = reader_pos_snapshot;
+      if (session->process_buffer_chain == NULL) {
+        // Set the read position back to the beginning because the entire buffer was processed.
+        session->buffer_reader.read_pos = 0;
+      } else {
+        // Revert the read position because the last process didn't fully
+        // read a packet.
+        session->buffer_reader.read_pos = reader_pos_snapshot;
+      }
     }
   }
 
@@ -906,7 +962,8 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
           game_server->sessions[session_index] =
               game_server->sessions[--game_server->session_count];
 
-          game_server->events[event_index] = game_server->events[--game_server->nevents];
+          game_server->events[event_index] =
+              game_server->events[--game_server->nevents];
 
 #if PXE_OUTPUT_CONNECTIONS
           u8 bytes[] = ENDPOINT_BYTES(session->socket.endpoint);
