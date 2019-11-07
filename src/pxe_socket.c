@@ -98,6 +98,9 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
     return 0;
   }
 
+  int optval = 1;
+  setsockopt(sock->fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+
   char service[32];
 
   sprintf_s(service, array_size(service), "%d", port);
@@ -127,6 +130,7 @@ bool32 pxe_socket_accept(pxe_socket* socket, pxe_socket* result) {
 
   socklen_t addr_size = (int)sizeof(their_addr);
 
+  pxe_socket_set_block(socket, 0);
   pxe_socket_handle new_fd =
       accept(socket->fd, (struct sockaddr*)&their_addr, &addr_size);
 
@@ -236,16 +240,10 @@ void pxe_socket_set_block(pxe_socket* socket, bool32 block) {
 #ifdef _WIN32
   ioctlsocket(socket->fd, FIONBIO, &mode);
 #else
-  int opts = fcntl(socket->fd, F_GETFL);
+  int flags = fcntl(socket->fd, F_GETFL, 0);
 
-  if (opts < 0) return;
+  flags = block ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK);
 
-  if (block) {
-    opts |= O_NONBLOCK;
-  } else {
-    opts &= ~O_NONBLOCK;
-  }
-
-  fcntl(socket->fd, F_SETFL, opts);
+  fcntl(socket->fd, F_SETFL, flags);
 #endif
 }

@@ -42,11 +42,12 @@ typedef struct pxe_game_server {
 
 #ifdef _WIN32
   WSAPOLLFD events[PXE_GAME_SERVER_MAX_SESSIONS];
+  size_t nevents;
 #else
+  int epollfd;
   struct epoll_event events[PXE_GAME_SERVER_MAX_SESSIONS];
 #endif
 
-  size_t nevents;
   struct pxe_buffer_chain* free_buffers;
 } pxe_game_server;
 
