@@ -1,6 +1,7 @@
 #ifndef PIXIE_H_
 #define PIXIE_H_
 
+#include <stddef.h>
 #include <stdint.h>
 
 typedef int8_t i8;

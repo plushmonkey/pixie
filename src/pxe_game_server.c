@@ -43,6 +43,20 @@ i64 pxe_get_time_ms() {
 #endif
 }
 
+#ifndef _MSVC_VER
+int sprintf_s(char* str, size_t str_size, const char* format, ...) {
+  va_list args;
+
+  va_start(args, format);
+
+  int result = vsprintf(str, format, args);
+
+  va_end(args);
+
+  return result;
+}
+#endif
+
 void pxe_strcpy(char* dest, char* src) {
   while (*src) {
     *dest++ = *src++;
@@ -457,7 +471,7 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
     }
 
     if (next_state >= PXE_PROTOCOL_STATE_COUNT) {
-      printf("Illegal state: %lld. Terminating connection.\n", next_state);
+      printf("Illegal state: %ld. Terminating connection.\n", next_state);
       return PXE_PROCESS_RESULT_DESTROY;
     }
 
@@ -574,7 +588,7 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 #endif
       } break;
       default: {
-        fprintf(stderr, "Received unhandled packet %lld in state %d\n", pkt_id,
+        fprintf(stderr, "Received unhandled packet %ld in state %d\n", pkt_id,
                 session->protocol_state);
         return PXE_PROCESS_RESULT_DESTROY;
       }
@@ -723,7 +737,7 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
       } break;
       default: {
 #if 1
-        fprintf(stderr, "Received unhandled packet %lld in state %d\n", pkt_id,
+        fprintf(stderr, "Received unhandled packet %ld in state %d\n", pkt_id,
                 session->protocol_state);
 #endif
 
