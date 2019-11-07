@@ -125,7 +125,7 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
 bool32 pxe_socket_accept(pxe_socket* socket, pxe_socket* result) {
   struct sockaddr_in their_addr;
 
-  int addr_size = (int)sizeof(their_addr);
+  socklen_t addr_size = (int)sizeof(their_addr);
 
   pxe_socket_handle new_fd =
       accept(socket->fd, (struct sockaddr*)&their_addr, &addr_size);
