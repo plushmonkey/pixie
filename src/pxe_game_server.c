@@ -542,6 +542,19 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
                       "%s joined the server.", session->username);
         pxe_game_server_send_chat(game_server, trans_arena, join_message,
                                   join_message_len, "dark_aqua");
+
+#if 1
+        // Send terrain
+        if (pxe_game_send_blank_chunk_data(session, trans_arena, 0, 0) == 0) {
+          fprintf(stderr, "Failed to send chunk data\n");
+        }
+
+        if (pxe_game_send_position_and_look(session, trans_arena, 0.0f, 100.0f,
+          0.0f) == 0) {
+          fprintf(stderr, "Failed to send position\n");
+      }
+#endif
+
 #else
         size_t data_size = array_size(pxe_login_response);
         size_t response_size = pxe_varint_size(data_size) + data_size;
@@ -627,18 +640,6 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         }
 
         printf("Received client settings from %s.\n", session->username);
-
-#if 1
-        // Send terrain
-        if (pxe_game_send_blank_chunk_data(session, trans_arena, 0, 0) == 0) {
-          fprintf(stderr, "Failed to send chunk data\n");
-        }
-
-        if (pxe_game_send_position_and_look(session, trans_arena, 0.0f, 100.0f,
-                                            0.0f) == 0) {
-          fprintf(stderr, "Failed to send position\n");
-        }
-#endif
       } break;
       case 0x0B: {  // Plugin message
         size_t channel_len;
