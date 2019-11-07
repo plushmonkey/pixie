@@ -252,8 +252,8 @@ void test_connection(pxe_memory_arena* arena) {
         read_index +=
             pxe_varint_read(buffer + read_index, result - read_index, &pkt_id);
 
-        printf("Packet length: %ld\n", pkt_length);
-        printf("Packet id: %ld\n", pkt_id);
+        printf("Packet length: %lld\n", pkt_length);
+        printf("Packet id: %lld\n", pkt_id);
 
         if (pkt_id == 0) {
           i64 response_size;

@@ -24,7 +24,7 @@ typedef unsigned long long pxe_socket_handle;
 typedef unsigned int pxe_socket_handle;
 #endif
 
-#ifdef _MSVC_VER
+#ifdef _MSC_VER
 #define ENDPOINT_BYTES(endpoint)              \
   {                                           \
     (endpoint).sin_addr.S_un.S_un_b.s_b1,     \

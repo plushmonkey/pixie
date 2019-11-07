@@ -16,7 +16,7 @@
 #define PXE_WOULDBLOCK EWOULDBLOCK
 #endif
 
-#ifndef _MSC_VER_
+#ifndef _MSC_VER
 int sprintf_s(char* str, size_t str_size, char* format, ...);
 #endif
 
@@ -99,7 +99,7 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
   }
 
   int optval = 1;
-  setsockopt(sock->fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+  setsockopt(sock->fd, SOL_SOCKET, SO_REUSEADDR, (char*)&optval, sizeof(optval));
 
   char service[32];
 
