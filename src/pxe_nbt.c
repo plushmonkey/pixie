@@ -212,7 +212,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       compound_tag->ntags = 0;
 
       // TODO: This probably shouldn't be called recursively otherwise bad
-        // actors could blow out the stack with nested lists.
+      // actors could blow out the stack with nested lists.
       if (pxe_nbt_parse_compound(reader, compound_tag, arena) == 0) {
         return 0;
       }

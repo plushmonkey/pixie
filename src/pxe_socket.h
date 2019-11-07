@@ -9,12 +9,12 @@
 #include <WinSock2.h>
 #else
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <errno.h>
 #define closesocket close
 #endif
 
@@ -33,12 +33,12 @@ typedef unsigned int pxe_socket_handle;
         (endpoint).sin_addr.S_un.S_un_b.s_b4  \
   }
 #else
-#define ENDPOINT_BYTES(endpoint)              \
-  {                                           \
-    (endpoint).sin_addr.s_addr & 0xFF,     \
-        ((endpoint).sin_addr.s_addr & 0xFF00) >> 8, \
-        ((endpoint).sin_addr.s_addr & 0xFF0000) >> 16, \
-        ((endpoint).sin_addr.s_addr & 0xFF000000 >> 24)  \
+#define ENDPOINT_BYTES(endpoint)                        \
+  {                                                     \
+    (endpoint).sin_addr.s_addr & 0xFF,                  \
+        ((endpoint).sin_addr.s_addr & 0xFF00) >> 8,     \
+        ((endpoint).sin_addr.s_addr & 0xFF0000) >> 16,  \
+        ((endpoint).sin_addr.s_addr & 0xFF000000 >> 24) \
   }
 #endif
 

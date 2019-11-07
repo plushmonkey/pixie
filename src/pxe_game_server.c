@@ -40,9 +40,9 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
                               pxe_memory_arena* trans_arena);
 
 void pxe_game_server_epoll(pxe_game_server* game_server,
-                              pxe_socket* listen_socket,
-                              pxe_memory_arena* perm_arena,
-                              pxe_memory_arena* trans_arena);
+                           pxe_socket* listen_socket,
+                           pxe_memory_arena* perm_arena,
+                           pxe_memory_arena* trans_arena);
 i64 pxe_get_time_ms() {
 #ifdef _WIN32
   return GetTickCount64();
@@ -864,7 +864,8 @@ bool32 pxe_game_server_read_session(pxe_game_server* game_server,
 
     if (process_result == PXE_PROCESS_RESULT_CONSUMED) {
       if (session->process_buffer_chain == NULL) {
-        // Set the read position back to the beginning because the entire buffer was processed.
+        // Set the read position back to the beginning because the entire buffer
+        // was processed.
         session->buffer_reader.read_pos = 0;
       } else {
         // Revert the read position because the last process didn't fully
@@ -921,7 +922,8 @@ void pxe_game_server_run(pxe_memory_arena* perm_arena,
   game_server->events[0].events = EPOLLIN;
   game_server->events[0].data.u64 = PXE_GAME_SERVER_MAX_SESSIONS + 1;
 
-  if (epoll_ctl(game_server->epollfd, EPOLL_CTL_ADD, listen_socket->fd, game_server->events)) {
+  if (epoll_ctl(game_server->epollfd, EPOLL_CTL_ADD, listen_socket->fd,
+                game_server->events)) {
     fprintf(stderr, "Failed to add listen socket to epoll.\n");
     return;
   }
@@ -1031,13 +1033,13 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
 #endif
 }
 
-
 void pxe_game_server_epoll(pxe_game_server* game_server,
-                              pxe_socket* listen_socket,
-                              pxe_memory_arena* perm_arena,
-                              pxe_memory_arena* trans_arena) {
+                           pxe_socket* listen_socket,
+                           pxe_memory_arena* perm_arena,
+                           pxe_memory_arena* trans_arena) {
 #ifndef _WIN32
-  int nfds = epoll_wait(game_server->epollfd, game_server->events, PXE_GAME_SERVER_MAX_SESSIONS, 0);
+  int nfds = epoll_wait(game_server->epollfd, game_server->events,
+                        PXE_GAME_SERVER_MAX_SESSIONS, 0);
 
   for (int event_index = 0; event_index < nfds; ++event_index) {
     struct epoll_event* event = game_server->events + event_index;
@@ -1073,7 +1075,8 @@ void pxe_game_server_epoll(pxe_game_server* game_server,
         new_event.events = EPOLLIN | EPOLLHUP;
         new_event.data.u64 = index;
 
-        if (epoll_ctl(game_server->epollfd, EPOLL_CTL_ADD, new_socket.fd, &new_event)) {
+        if (epoll_ctl(game_server->epollfd, EPOLL_CTL_ADD, new_socket.fd,
+                      &new_event)) {
           fprintf(stderr, "Failed to add new socket to epoll.\n");
         }
       } else {
@@ -1084,34 +1087,37 @@ void pxe_game_server_epoll(pxe_game_server* game_server,
       pxe_session* session = game_server->sessions + session_index;
 
       if (pxe_game_server_read_session(game_server, perm_arena, trans_arena,
-                                         session) == 0) {
-          pxe_game_free_session(game_server, session);
-          pxe_socket_disconnect(&session->socket);
+                                       session) == 0) {
+        pxe_game_free_session(game_server, session);
+        pxe_socket_disconnect(&session->socket);
 
 #if PXE_OUTPUT_CONNECTIONS
-          u8 bytes[] = ENDPOINT_BYTES(session->socket.endpoint);
-          printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0], bytes[1],
-                 bytes[2], bytes[3], session->socket.endpoint.sin_port);
+        u8 bytes[] = ENDPOINT_BYTES(session->socket.endpoint);
+        printf("%hhu.%hhu.%hhu.%hhu:%hu disconnected.\n", bytes[0], bytes[1],
+               bytes[2], bytes[3], session->socket.endpoint.sin_port);
 #endif
 
-          // Swap the last session to the current position then decrement
-          // session count so this session is removed.
-          game_server->sessions[session_index] =
-              game_server->sessions[--game_server->session_count];
+        // Swap the last session to the current position then decrement
+        // session count so this session is removed.
+        game_server->sessions[session_index] =
+            game_server->sessions[--game_server->session_count];
 
-          if (session_index < game_server->session_count) {
-            struct epoll_event mod_event;
-            mod_event.events = EPOLLIN | EPOLLHUP;
-            mod_event.data.u64 = session_index;
+        if (session_index < game_server->session_count) {
+          struct epoll_event mod_event;
+          mod_event.events = EPOLLIN | EPOLLHUP;
+          mod_event.data.u64 = session_index;
 
-            // The session pointer now points to the swapped session, so the event should be modified to point to the new session index.
-            if (epoll_ctl(game_server->epollfd, EPOLL_CTL_MOD, session->socket.fd, &mod_event)) {
-              fprintf(stderr, "Failed to modify event session index for fd %d.\n", session->socket.fd);
-            }
+          // The session pointer now points to the swapped session, so the event
+          // should be modified to point to the new session index.
+          if (epoll_ctl(game_server->epollfd, EPOLL_CTL_MOD, session->socket.fd,
+                        &mod_event)) {
+            fprintf(stderr, "Failed to modify event session index for fd %d.\n",
+                    session->socket.fd);
           }
-
-          continue;
         }
+
+        continue;
+      }
     }
     fflush(stdout);
   }

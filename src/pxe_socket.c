@@ -99,7 +99,8 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
   }
 
   int optval = 1;
-  setsockopt(sock->fd, SOL_SOCKET, SO_REUSEADDR, (char*)&optval, sizeof(optval));
+  setsockopt(sock->fd, SOL_SOCKET, SO_REUSEADDR, (char*)&optval,
+             sizeof(optval));
 
   char service[32];
 

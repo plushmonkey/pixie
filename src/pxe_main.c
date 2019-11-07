@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 size_t write_string(char* dest, const char* src, size_t len) {
   size_t varint_size = pxe_varint_write(len, dest);
 
@@ -305,8 +304,8 @@ int main(int argc, char* argv[]) {
 
   // test_connection(&trans_arena);
   pxe_game_server_run(&perm_arena, &trans_arena);
-  //test_nbt_read(&perm_arena, &trans_arena, "out.nbt");
-  //test_nbt_write(&perm_arena, &trans_arena, "out.nbt");
+  // test_nbt_read(&perm_arena, &trans_arena, "out.nbt");
+  // test_nbt_write(&perm_arena, &trans_arena, "out.nbt");
 
   return 0;
 }

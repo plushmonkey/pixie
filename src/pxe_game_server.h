@@ -39,7 +39,6 @@ typedef struct pxe_game_server {
   pxe_session sessions[PXE_GAME_SERVER_MAX_SESSIONS];
   size_t session_count;
 
-
 #ifdef _WIN32
   WSAPOLLFD events[PXE_GAME_SERVER_MAX_SESSIONS];
   size_t nevents;
