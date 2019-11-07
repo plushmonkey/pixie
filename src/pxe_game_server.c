@@ -47,6 +47,7 @@ void pxe_strcpy(char* dest, char* src) {
   while (*src) {
     *dest++ = *src++;
   }
+  *dest = *src;
 }
 
 void pxe_generate_uuid(char* result) {
@@ -362,6 +363,46 @@ bool32 pxe_game_send_join_packet(pxe_session* session,
   return 1;
 }
 
+bool32 pxe_game_server_send_chat(pxe_game_server* server,
+                                 pxe_memory_arena* trans_arena, char* message,
+                                 size_t message_len, char* color) {
+  char data[512];
+  u8 position = 0;
+
+  size_t data_len =
+      sprintf_s(data, array_size(data), "{\"text\":\"%s\", \"color\": \"%s\"}", message, color);
+
+  size_t payload_len = data_len + pxe_varint_size(data_len) + sizeof(u8);
+  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
+  u8* payload = pxe_arena_alloc(trans_arena, payload_len);
+
+  pxe_buffer_writer writer;
+
+  writer.buffer = buffer;
+  writer.buffer->data = payload;
+  writer.buffer->size = payload_len;
+  writer.write_pos = 0;
+
+  if (pxe_buffer_write_length_string(&writer, data, data_len) == 0) {
+    return 0;
+  }
+
+  if (pxe_buffer_write_u8(&writer, position) == 0) {
+    return 0;
+  }
+
+  for (size_t i = 0; i < server->session_count; ++i) {
+    pxe_session* session = server->sessions + i;
+
+    if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
+
+    send_packet(&session->socket, trans_arena, 0x0E, (char*)writer.buffer->data,
+                writer.buffer->size);
+  }
+
+  return 1;
+}
+
 pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
                                             pxe_session* session,
                                             pxe_memory_arena* trans_arena) {
@@ -494,6 +535,13 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         }
 
         session->protocol_state = PXE_PROTOCOL_STATE_PLAY;
+
+        char join_message[512];
+        size_t join_message_len =
+            sprintf_s(join_message, array_size(join_message),
+                      "%s joined the server.", session->username);
+        pxe_game_server_send_chat(game_server, trans_arena, join_message,
+                                  join_message_len, "dark_aqua");
 #else
         size_t data_size = array_size(pxe_login_response);
         size_t response_size = pxe_varint_size(data_size) + data_size;
@@ -515,6 +563,29 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
     }
   } else if (session->protocol_state == PXE_PROTOCOL_STATE_PLAY) {
     switch (pkt_id) {
+      case 0x03: {  // Chat
+        size_t message_len;
+        if (pxe_buffer_chain_read_length_string(reader, NULL, &message_len) ==
+            0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        char* message = pxe_arena_alloc(trans_arena, message_len + 1);
+        if (pxe_buffer_chain_read_length_string(reader, message,
+                                                &message_len) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        message[message_len] = 0;
+
+        char output_message[512];
+
+        size_t output_message_len =
+            sprintf_s(output_message, array_size(output_message), "%s> %s",
+                      session->username, message);
+
+        pxe_game_server_send_chat(game_server, trans_arena, output_message, output_message_len, "white");
+      } break;
       case 0x05: {
         size_t locale_len;
         if (pxe_buffer_chain_read_length_string(reader, NULL, &locale_len) ==
@@ -819,9 +890,10 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
       }
     }
 
-    for (size_t i = 1; i < game_server->nevents;) {
-      if (game_server->events[i].revents != 0) {
-        pxe_session* session = &game_server->sessions[i - 1];
+    for (size_t event_index = 1; event_index < game_server->nevents;) {
+      if (game_server->events[event_index].revents != 0) {
+        size_t session_index = event_index - 1;
+        pxe_session* session = &game_server->sessions[session_index];
 
         if (pxe_game_server_read_session(game_server, perm_arena, trans_arena,
                                          session) == 0) {
@@ -830,10 +902,10 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
 
           // Swap the last session to the current position then decrement
           // session count so this session is removed.
-          game_server->sessions[i] =
+          game_server->sessions[session_index] =
               game_server->sessions[--game_server->session_count];
 
-          game_server->events[i] = game_server->events[--game_server->nevents];
+          game_server->events[event_index] = game_server->events[--game_server->nevents];
 
 #if PXE_OUTPUT_CONNECTIONS
           u8 bytes[] = ENDPOINT_BYTES(session->socket.endpoint);
@@ -845,7 +917,7 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
         }
       }
 
-      ++i;
+      ++event_index;
     }
 
     fflush(stdout);

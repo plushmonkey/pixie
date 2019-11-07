@@ -11,5 +11,5 @@ pixie.exe: $(WIN32_SRC:.c=.o)
 	$(CC) -o $@ $(CFLAGS) $^ $(LIBS)
 
 clean:
-	-rm -f $(SRC:.c=.o)
+	-rm -f $(WIN32_SRC:.c=.o)
 
