@@ -546,12 +546,14 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         pxe_game_server_send_chat(game_server, trans_arena, join_message,
                                   join_message_len, "dark_aqua");
 
-#if 1
+#if 0
         // Send terrain
         if (pxe_game_send_blank_chunk_data(session, trans_arena, 0, 0) == 0) {
           fprintf(stderr, "Failed to send chunk data\n");
         }
+#endif
 
+#if 1
         if (pxe_game_send_position_and_look(session, trans_arena, 0.0f, 100.0f,
                                             0.0f) == 0) {
           fprintf(stderr, "Failed to send position\n");
