@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef _MSC_VER
 int sprintf_s(char* str, size_t str_size, const char* format, ...) {
   va_list args;
 
@@ -17,6 +18,7 @@ int sprintf_s(char* str, size_t str_size, const char* format, ...) {
 
   return result;
 }
+#endif
 
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
