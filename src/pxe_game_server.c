@@ -189,6 +189,12 @@ bool32 pxe_game_encode_chunk_data(pxe_memory_arena* trans_arena, u64** data,
 
   u64* encoded = pxe_arena_alloc(trans_arena, required_segments * sizeof(u64));
 
+  // Clear the segments before writing chunk data into them.
+  for (size_t i = 0; i < required_segments; ++i) {
+    u64* segment = encoded + i;
+    *segment = 0;
+  }
+
   size_t bit_index = 0;
 
   for (size_t y = 0; y < 16; ++y) {
@@ -289,7 +295,8 @@ bool32 pxe_game_create_chunk_section(pxe_memory_arena* trans_arena,
     return 0;
   }
 
-  if (pxe_buffer_write_raw_string(&writer, (char*)palette_data, palette_size) == 0) {
+  if (pxe_buffer_write_raw_string(&writer, (char*)palette_data, palette_size) ==
+      0) {
     return 0;
   }
 

@@ -519,13 +519,15 @@ bool32 pxe_buffer_write_u64(pxe_buffer_writer* writer, u64 data) {
 }
 
 bool32 pxe_buffer_write_varint(pxe_buffer_writer* writer, i32 data) {
-  writer->write_pos += pxe_varint_write(data, (char*)writer->buffer->data + writer->write_pos);
+  writer->write_pos +=
+      pxe_varint_write(data, (char*)writer->buffer->data + writer->write_pos);
 
   return 1;
 }
 
 bool32 pxe_buffer_write_varlong(pxe_buffer_writer* writer, i64 data) {
-  writer->write_pos += pxe_varlong_write(data, (char*)writer->buffer->data + writer->write_pos);
+  writer->write_pos +=
+      pxe_varlong_write(data, (char*)writer->buffer->data + writer->write_pos);
 
   return 1;
 }
@@ -562,8 +564,8 @@ bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
   if (writer->write_pos + pxe_varint_size((i32)length) > writer->buffer->size)
     return 0;
 
-  size_t length_size =
-      pxe_varint_write((i32)length, (char*)writer->buffer->data + writer->write_pos);
+  size_t length_size = pxe_varint_write(
+      (i32)length, (char*)writer->buffer->data + writer->write_pos);
 
   writer->write_pos += length_size;
 
