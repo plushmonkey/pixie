@@ -49,7 +49,7 @@ bool32 pxe_socket_connect(pxe_socket* sock, const char* server, u16 port) {
 
   char service[10] = {0};
 
-  sprintf_s(service, array_size(service), "%d", port);
+  sprintf_s(service, pxe_array_size(service), "%d", port);
 
   if (getaddrinfo(server, service, &hint, &result) != 0) {
     return 0;
@@ -104,7 +104,7 @@ bool32 pxe_socket_listen(pxe_socket* sock, const char* local_host, u16 port) {
 
   char service[32];
 
-  sprintf_s(service, array_size(service), "%d", port);
+  sprintf_s(service, pxe_array_size(service), "%d", port);
 
   if (getaddrinfo(local_host, service, &hint, &result) != 0) {
     return 0;

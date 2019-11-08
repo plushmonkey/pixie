@@ -112,7 +112,7 @@ bool32 pxe_buffer_chain_read_u16(pxe_buffer_chain_reader* reader, u16* out) {
     char buf[2] = {0};
 
     size_t first_len = current->buffer->size - read_index;
-    size_t second_len = array_size(buf) - first_len;
+    size_t second_len = pxe_array_size(buf) - first_len;
 
     for (size_t i = 0; i < first_len; ++i) {
       buf[i] = (char)current->buffer->data[read_index + i];
@@ -158,7 +158,7 @@ bool32 pxe_buffer_chain_read_u32(pxe_buffer_chain_reader* reader, u32* out) {
     char buf[4] = {0};
 
     size_t first_len = current->buffer->size - read_index;
-    size_t second_len = array_size(buf) - first_len;
+    size_t second_len = pxe_array_size(buf) - first_len;
 
     for (size_t i = 0; i < first_len; ++i) {
       buf[i] = (char)current->buffer->data[read_index + i];
@@ -204,7 +204,7 @@ bool32 pxe_buffer_chain_read_u64(pxe_buffer_chain_reader* reader, u64* out) {
     char buf[8] = {0};
 
     size_t first_len = current->buffer->size - read_index;
-    size_t second_len = array_size(buf) - first_len;
+    size_t second_len = pxe_array_size(buf) - first_len;
 
     for (size_t i = 0; i < first_len; ++i) {
       buf[i] = (char)current->buffer->data[read_index + i];
@@ -325,7 +325,7 @@ bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader,
     char buf[4] = {0};
 
     size_t first_len = current->buffer->size - read_index;
-    size_t second_len = array_size(buf) - first_len;
+    size_t second_len = pxe_array_size(buf) - first_len;
 
     for (size_t i = 0; i < first_len; ++i) {
       buf[i] = (char)current->buffer->data[read_index + i];
@@ -372,7 +372,7 @@ bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader,
     char buf[8] = {0};
 
     size_t first_len = current->buffer->size - read_index;
-    size_t second_len = array_size(buf) - first_len;
+    size_t second_len = pxe_array_size(buf) - first_len;
 
     for (size_t i = 0; i < first_len; ++i) {
       buf[i] = (char)current->buffer->data[read_index + i];
@@ -559,8 +559,8 @@ bool32 pxe_buffer_write_double(pxe_buffer_writer* writer, double data) {
   return 1;
 }
 
-bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
-                                      size_t length) {
+bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer,
+                                      const char* data, size_t length) {
   if (writer->write_pos + pxe_varint_size((i32)length) > writer->buffer->size)
     return 0;
 
@@ -580,7 +580,7 @@ bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
   return 1;
 }
 
-bool32 pxe_buffer_write_raw_string(pxe_buffer_writer* writer, char* data,
+bool32 pxe_buffer_write_raw_string(pxe_buffer_writer* writer, const char* data,
                                    size_t length) {
   if (writer->write_pos + length > writer->buffer->size) return 0;
 

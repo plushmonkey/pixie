@@ -16,7 +16,18 @@ typedef uint64_t u64;
 
 typedef i32 bool32;
 
-#define array_size(arr) (sizeof((arr)) / (sizeof(*(arr))))
-#define array_string_size(arr) ((sizeof((arr)) / (sizeof(*(arr)))) - 1)
+#define pxe_array_size(arr) (sizeof((arr)) / (sizeof(*(arr))))
+#define pxe_array_string_size(arr) (pxe_array_size(arr) - 1)
+
+inline size_t pxe_bitset_count(u32 value) {
+  size_t count = 0;
+
+  for (size_t i = 0; i < sizeof(u32) * 8; ++i) {
+    count += (value & 1);
+    value >>= 1;
+  }
+
+  return count;
+}
 
 #endif
