@@ -12,7 +12,7 @@
 #include <string.h>
 
 size_t write_string(char* dest, const char* src, size_t len) {
-  size_t varint_size = pxe_varint_write(len, dest);
+  size_t varint_size = pxe_varint_write((i32)len, dest);
 
   dest += varint_size;
 
@@ -26,12 +26,12 @@ size_t write_string(char* dest, const char* src, size_t len) {
 void send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
                  const char* src, size_t size) {
   size_t id_size = pxe_varint_size(packet_id);
-  size_t length_size = pxe_varint_size(size + id_size);
+  size_t length_size = pxe_varint_size((i32)(size + id_size));
   char* pkt = pxe_arena_alloc(arena, length_size + id_size + size);
 
   size_t index = 0;
 
-  index += pxe_varint_write(size + id_size, pkt + index);
+  index += pxe_varint_write((i32)(size + id_size), pkt + index);
   index += pxe_varint_write(packet_id, pkt + index);
 
   char* payload = pkt + index;
@@ -47,11 +47,11 @@ void send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
 
 inline pxe_buffer_chain* generate_string_chain(pxe_memory_arena* arena,
                                                const char* str, size_t len) {
-  size_t varint_size = pxe_varint_size(len);
+  size_t varint_size = pxe_varint_size((i32)len);
 
   u8* len_data = pxe_arena_alloc(arena, varint_size);
 
-  pxe_varint_write(len, (char*)len_data);
+  pxe_varint_write((i32)len, (char*)len_data);
 
   pxe_buffer_chain* chain = pxe_chain_insert(arena, NULL, (u8*)str, len);
   chain = pxe_chain_insert(arena, chain, len_data, varint_size);
@@ -61,12 +61,12 @@ inline pxe_buffer_chain* generate_string_chain(pxe_memory_arena* arena,
 
 pxe_buffer* generate_empty_packet(pxe_memory_arena* arena, int packet_id) {
   size_t id_size = pxe_varint_size(packet_id);
-  size_t length_size = pxe_varint_size(id_size);
+  size_t length_size = pxe_varint_size((i32)id_size);
   char* pkt = pxe_arena_alloc(arena, length_size + id_size);
 
   size_t index = 0;
 
-  index += pxe_varint_write(id_size, pkt + index);
+  index += pxe_varint_write((i32)id_size, pkt + index);
   index += pxe_varint_write(packet_id, pkt + index);
 
   pxe_buffer* buffer = pxe_arena_push_type(arena, pxe_buffer);
@@ -80,13 +80,13 @@ pxe_buffer* generate_empty_packet(pxe_memory_arena* arena, int packet_id) {
 pxe_buffer* generate_packet(pxe_memory_arena* arena, int packet_id,
                             pxe_buffer* payload_buffer) {
   size_t id_size = pxe_varint_size(packet_id);
-  size_t length_size = pxe_varint_size(payload_buffer->size + id_size);
+  size_t length_size = pxe_varint_size((i32)(payload_buffer->size + id_size));
   char* pkt =
       pxe_arena_alloc(arena, length_size + id_size + payload_buffer->size);
 
   size_t index = 0;
 
-  index += pxe_varint_write(payload_buffer->size + id_size, pkt + index);
+  index += pxe_varint_write((i32)(payload_buffer->size + id_size), pkt + index);
   index += pxe_varint_write(packet_id, pkt + index);
 
   char* payload = pkt + index;
@@ -109,13 +109,13 @@ pxe_buffer_chain* generate_packet_chain(pxe_memory_arena* arena, int packet_id,
                                         pxe_buffer_chain* payload_chain) {
   size_t payload_size = pxe_buffer_chain_size(payload_chain);
   size_t id_size = pxe_varint_size(packet_id);
-  size_t length_size = pxe_varint_size(payload_size + id_size);
+  size_t length_size = pxe_varint_size((i32)(payload_size + id_size));
 
   u8* id = pxe_arena_alloc(arena, id_size);
   pxe_varint_write(packet_id, (char*)id);
 
   u8* length = pxe_arena_alloc(arena, length_size);
-  pxe_varint_write(payload_size + id_size, (char*)length);
+  pxe_varint_write((i32)(payload_size + id_size), (char*)length);
 
   pxe_buffer_chain* chain = pxe_chain_insert(arena, payload_chain, id, id_size);
   chain = pxe_chain_insert(arena, chain, length, length_size);
@@ -160,7 +160,7 @@ pxe_buffer* generate_handshake(pxe_memory_arena* arena, const char* hostname,
 
   // buffer_size = protocol version + host_len + host + port + state
   size_t payload_size = pxe_varint_size(protocol_version) +
-                        pxe_varint_size(host_len) + host_len + 2 +
+                        pxe_varint_size((i32)host_len) + host_len + 2 +
                         pxe_varint_size(next_state);
 
   char* payload = pxe_arena_alloc(arena, payload_size);
@@ -189,7 +189,7 @@ void send_handshake(pxe_socket* socket, pxe_memory_arena* arena,
 
   // buffer_size = protocol version + host_len + host + port + state
   size_t buffer_size = pxe_varint_size(protocol_version) +
-                       pxe_varint_size(host_len) + host_len + 2 +
+                       pxe_varint_size((i32)host_len) + host_len + 2 +
                        pxe_varint_size(next_state);
 
   char* buffer = pxe_arena_alloc(arena, buffer_size);
@@ -245,17 +245,17 @@ void test_connection(pxe_memory_arena* arena) {
       size_t result = pxe_socket_receive(&socket, buffer, read_buffer_size);
 
       if (result != 0) {
-        i64 pkt_length, pkt_id;
+        i32 pkt_length, pkt_id;
 
         size_t read_index = pxe_varint_read(buffer, result, &pkt_length);
         read_index +=
             pxe_varint_read(buffer + read_index, result - read_index, &pkt_id);
 
-        printf("Packet length: %lld\n", pkt_length);
-        printf("Packet id: %lld\n", pkt_id);
+        printf("Packet length: %d\n", pkt_length);
+        printf("Packet id: %d\n", pkt_id);
 
         if (pkt_id == 0) {
-          i64 response_size;
+          i32 response_size;
 
           read_index += pxe_varint_read(buffer + read_index,
                                         result - read_index, &response_size);
@@ -304,8 +304,6 @@ int main(int argc, char* argv[]) {
 
   // test_connection(&trans_arena);
   pxe_game_server_run(&perm_arena, &trans_arena);
-  // test_nbt_read(&perm_arena, &trans_arena, "out.nbt");
-  // test_nbt_write(&perm_arena, &trans_arena, "out.nbt");
 
   return 0;
 }

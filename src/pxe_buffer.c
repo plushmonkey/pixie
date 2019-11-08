@@ -5,9 +5,6 @@
 
 #include <stdlib.h>
 
-#ifdef _WIN32
-#include <Windows.h>
-#endif
 // TODO: Endianness
 
 #ifdef _MSC_VER
@@ -15,7 +12,6 @@
 #define bswap_32(x) _byteswap_ulong(x)
 #define bswap_64(x) _byteswap_uint64(x)
 #else
-//#define bswap_16(x) ((((x)&0xFF) << 8) | (((x)&0xFF00) >> 8))
 #define bswap_16(x) __builtin_bswap16(x)
 #define bswap_32(x) __builtin_bswap32(x)
 #define bswap_64(x) __builtin_bswap64(x)
@@ -201,7 +197,7 @@ bool32 pxe_buffer_chain_read_u64(pxe_buffer_chain_reader* reader, u64* out) {
   // This lies right on the boundary of the two chains
   if (read_index + sizeof(u64) > current->buffer->size) {
     if (current->next == NULL) {
-      // There's not enough data to read the u16 if there's no next chain.
+      // There's not enough data to read the u64 if there's no next chain.
       return 0;
     }
 
@@ -233,7 +229,44 @@ bool32 pxe_buffer_chain_read_u64(pxe_buffer_chain_reader* reader, u64* out) {
 }
 
 bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader,
-                                    i64* value) {
+                                    i32* value) {
+  pxe_buffer_chain* current = NULL;
+  size_t base_pos = 0;
+
+  if (pxe_buffer_get_pos_and_chain(reader, &current, &base_pos) == 0) {
+    return 0;
+  }
+
+  size_t read_index = reader->read_pos - base_pos;
+  int shift = 0;
+  size_t i = 0;
+
+  *value = 0;
+
+  do {
+    if (read_index + i >= current->buffer->size) {
+      if (current->next == NULL) {
+        // The buffer doesn't have enough data to fully read this VarInt.
+        *value = 0;
+        return 0;
+      }
+
+      read_index = 0;
+      current = current->next;
+      continue;
+    }
+
+    *value |= (i32)(current->buffer->data[read_index + i] & 0x7F) << shift;
+    shift += 7;
+  } while ((current->buffer->data[read_index + i++] & 0x80) != 0);
+
+  reader->read_pos += i;
+
+  return 1;
+}
+
+bool32 pxe_buffer_chain_read_varlong(pxe_buffer_chain_reader* reader,
+                                     i64* value) {
   pxe_buffer_chain* current = NULL;
   size_t base_pos = 0;
 
@@ -285,7 +318,7 @@ bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader,
   // This lies right on the boundary of the two chains
   if (read_index + sizeof(float) > current->buffer->size) {
     if (current->next == NULL) {
-      // There's not enough data to read the u32 if there's no next chain.
+      // There's not enough data to read the float if there's no next chain.
       return 0;
     }
 
@@ -309,7 +342,7 @@ bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader,
     data = *(float*)&current->buffer->data[read_index];
   }
 
-  *out = data;
+  *out = (float)bswap_32((u32)data);
 
   reader->read_pos += sizeof(float);
 
@@ -332,7 +365,7 @@ bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader,
   // This lies right on the boundary of the two chains
   if (read_index + sizeof(double) > current->buffer->size) {
     if (current->next == NULL) {
-      // There's not enough data to read the u32 if there's no next chain.
+      // There's not enough data to read the double if there's no next chain.
       return 0;
     }
 
@@ -356,7 +389,7 @@ bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader,
     data = *(double*)&current->buffer->data[read_index];
   }
 
-  *out = data;
+  *out = (double)bswap_64((u64)data);
 
   reader->read_pos += sizeof(double);
 
@@ -365,7 +398,7 @@ bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader,
 
 bool32 pxe_buffer_chain_read_length_string(pxe_buffer_chain_reader* reader,
                                            char* out, size_t* size) {
-  i64 str_len;
+  i32 str_len;
 
   size_t pos_snapshot = reader->read_pos;
 
@@ -485,8 +518,14 @@ bool32 pxe_buffer_write_u64(pxe_buffer_writer* writer, u64 data) {
   return 1;
 }
 
-bool32 pxe_buffer_write_varint(pxe_buffer_writer* writer, i64 data) {
-  writer->write_pos += pxe_varint_write(data, (char*)writer->buffer->data);
+bool32 pxe_buffer_write_varint(pxe_buffer_writer* writer, i32 data) {
+  writer->write_pos += pxe_varint_write(data, (char*)writer->buffer->data + writer->write_pos);
+
+  return 1;
+}
+
+bool32 pxe_buffer_write_varlong(pxe_buffer_writer* writer, i64 data) {
+  writer->write_pos += pxe_varlong_write(data, (char*)writer->buffer->data + writer->write_pos);
 
   return 1;
 }
@@ -494,6 +533,9 @@ bool32 pxe_buffer_write_varint(pxe_buffer_writer* writer, i64 data) {
 bool32 pxe_buffer_write_float(pxe_buffer_writer* writer, float data) {
   if (writer->write_pos + sizeof(data) > writer->buffer->size) return 0;
 
+  u32 int_rep = *(u32*)&data;
+  int_rep = bswap_32(int_rep);
+  data = *(float*)&int_rep;
   *(float*)(writer->buffer->data + writer->write_pos) = data;
 
   writer->write_pos += sizeof(float);
@@ -504,6 +546,10 @@ bool32 pxe_buffer_write_float(pxe_buffer_writer* writer, float data) {
 bool32 pxe_buffer_write_double(pxe_buffer_writer* writer, double data) {
   if (writer->write_pos + sizeof(data) > writer->buffer->size) return 0;
 
+  u64 int_rep = *(u64*)&data;
+  int_rep = bswap_64(int_rep);
+  data = *(double*)&int_rep;
+
   *(double*)(writer->buffer->data + writer->write_pos) = data;
 
   writer->write_pos += sizeof(double);
@@ -513,11 +559,11 @@ bool32 pxe_buffer_write_double(pxe_buffer_writer* writer, double data) {
 
 bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer, char* data,
                                       size_t length) {
-  if (writer->write_pos + pxe_varint_size(length) > writer->buffer->size)
+  if (writer->write_pos + pxe_varint_size((i32)length) > writer->buffer->size)
     return 0;
 
   size_t length_size =
-      pxe_varint_write(length, (char*)writer->buffer->data + writer->write_pos);
+      pxe_varint_write((i32)length, (char*)writer->buffer->data + writer->write_pos);
 
   writer->write_pos += length_size;
 
