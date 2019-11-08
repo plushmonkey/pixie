@@ -3,7 +3,7 @@
 
 #include "pixie.h"
 #include "pxe_buffer.h"
-#include "pxe_protocol.h"
+#include "protocol/pxe_protocol.h"
 #include "pxe_socket.h"
 
 typedef struct pxe_session {

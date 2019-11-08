@@ -1,5 +1,6 @@
 #include "pxe_game_server.h"
 
+#include "protocol/pxe_protocol_play.h"
 #include "pxe_alloc.h"
 #include "pxe_buffer.h"
 #include "pxe_nbt.h"
@@ -34,6 +35,11 @@ static const u32 pxe_chunk_palette[] = {0, 33, 9, 10, 1, 14, 15};
 
 void pxe_send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
                      pxe_buffer* buffer) {
+  if (buffer == NULL) {
+    fprintf(stderr, "Packet %d was null when sending.\n", packet_id);
+    return;
+  }
+
   size_t size = buffer->size;
   size_t id_size = pxe_varint_size(packet_id);
   size_t length_size = pxe_varint_size((i32)(size + id_size));
@@ -74,20 +80,6 @@ i64 pxe_get_time_ms() {
   return time.tv_sec * 1000 + (time.tv_nsec / 1.0e6);
 #endif
 }
-
-#ifndef _MSC_VER
-int sprintf_s(char* str, size_t str_size, const char* format, ...) {
-  va_list args;
-
-  va_start(args, format);
-
-  int result = vsprintf(str, format, args);
-
-  va_end(args);
-
-  return result;
-}
-#endif
 
 void pxe_strcpy(char* dest, char* src) {
   while (*src) {
@@ -411,52 +403,8 @@ bool32 pxe_game_send_position_and_look(pxe_session* session,
                                        float y, float z) {
   static i32 next_teleport_id = 1;
 
-  float yaw = 0.0f;
-  float pitch = 0.0f;
-  u8 flags = 0;
-  i32 teleport_id = next_teleport_id++;
-
-  size_t size = sizeof(double) + sizeof(double) + sizeof(double) +
-                sizeof(float) + sizeof(float) + sizeof(u8) +
-                pxe_varint_size(teleport_id);
-
-  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
-  u8* payload = pxe_arena_alloc(trans_arena, size);
-
-  pxe_buffer_writer writer;
-
-  writer.buffer = buffer;
-  writer.buffer->data = payload;
-  writer.buffer->size = size;
-  writer.write_pos = 0;
-
-  if (!pxe_buffer_write_double(&writer, x)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_double(&writer, y)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_double(&writer, z)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_float(&writer, yaw)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_float(&writer, pitch)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_u8(&writer, flags)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_varint(&writer, teleport_id)) {
-    return 0;
-  }
+  pxe_buffer* buffer = pxe_serialize_play_position_and_look(
+      trans_arena, x, y, z, 0.0f, 0.0f, 0, next_teleport_id++);
 
   pxe_send_packet(&session->socket, trans_arena,
                   PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_POSITION_AND_LOOK, buffer);
@@ -466,19 +414,7 @@ bool32 pxe_game_send_position_and_look(pxe_session* session,
 
 bool32 pxe_game_send_keep_alive_packet(pxe_session* session,
                                        pxe_memory_arena* trans_arena, i64 id) {
-  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
-  u8* payload = pxe_arena_alloc(trans_arena, sizeof(u64));
-
-  pxe_buffer_writer writer;
-
-  writer.buffer = buffer;
-  writer.buffer->data = payload;
-  writer.buffer->size = sizeof(u64);
-  writer.write_pos = 0;
-
-  if (pxe_buffer_write_u64(&writer, (u64)id) == 0) {
-    return 0;
-  }
+  pxe_buffer* buffer = pxe_serialize_play_keep_alive(trans_arena, id);
 
   pxe_send_packet(&session->socket, trans_arena,
                   PXE_PROTOCOL_OUTBOUND_PLAY_KEEP_ALIVE, buffer);
@@ -489,29 +425,8 @@ bool32 pxe_game_send_keep_alive_packet(pxe_session* session,
 bool32 pxe_game_send_player_abilities(pxe_session* session,
                                       pxe_memory_arena* trans_arena, u8 flags,
                                       float fly_speed, float fov) {
-  size_t size = sizeof(u8) + sizeof(float) + sizeof(float);
-
-  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
-  u8* payload = pxe_arena_alloc(trans_arena, size);
-
-  pxe_buffer_writer writer;
-
-  writer.buffer = buffer;
-  writer.buffer->data = payload;
-  writer.buffer->size = size;
-  writer.write_pos = 0;
-
-  if (!pxe_buffer_write_u8(&writer, flags)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_float(&writer, fly_speed)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_float(&writer, fov)) {
-    return 0;
-  }
+  pxe_buffer* buffer =
+      pxe_serialize_play_player_abilities(trans_arena, flags, fly_speed, fov);
 
   pxe_send_packet(&session->socket, trans_arena,
                   PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_ABILITIES, buffer);
@@ -523,57 +438,8 @@ bool32 pxe_game_send_join_packet(pxe_session* session,
                                  pxe_memory_arena* trans_arena) {
   static i32 next_entity_id = 1;
 
-  i32 eid = next_entity_id++;
-  u8 gamemode = 0;
-  i32 dimension = 0;
-  u8 max_players = 0xFF;
-  char level_type[] = "default";
-  i32 view_distance = 16;
-  bool32 reduced_debug = 0;
-
-  i32 level_len = pxe_array_size(level_type) - 1;
-
-  size_t size = sizeof(eid) + sizeof(gamemode) + sizeof(dimension) +
-                sizeof(max_players) + pxe_varint_size(level_len) + level_len +
-                pxe_varint_size(view_distance) + 1;
-
-  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
-  u8* payload = pxe_arena_alloc(trans_arena, size);
-
-  pxe_buffer_writer writer;
-
-  writer.buffer = buffer;
-  writer.buffer->data = payload;
-  writer.buffer->size = size;
-  writer.write_pos = 0;
-
-  if (!pxe_buffer_write_u32(&writer, eid)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_u8(&writer, gamemode)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_u32(&writer, dimension)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_u8(&writer, max_players)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_length_string(&writer, level_type, level_len)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_varint(&writer, view_distance)) {
-    return 0;
-  }
-
-  if (!pxe_buffer_write_u8(&writer, (u8)reduced_debug)) {
-    return 0;
-  }
+  pxe_buffer* buffer = pxe_serialize_play_join_game(
+      trans_arena, next_entity_id++, 0, 0, "default", 16, 0);
 
   pxe_send_packet(&session->socket, trans_arena,
                   PXE_PROTOCOL_OUTBOUND_PLAY_JOIN_GAME, buffer);
@@ -584,31 +450,8 @@ bool32 pxe_game_send_join_packet(pxe_session* session,
 bool32 pxe_game_server_send_chat(pxe_game_server* server,
                                  pxe_memory_arena* trans_arena, char* message,
                                  size_t message_len, char* color) {
-  char data[512];
-  u8 position = 0;
-
-  size_t data_len =
-      sprintf_s(data, pxe_array_size(data),
-                "{\"text\":\"%s\", \"color\": \"%s\"}", message, color);
-
-  size_t payload_len = data_len + pxe_varint_size((i32)data_len) + sizeof(u8);
-  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
-  u8* payload = pxe_arena_alloc(trans_arena, payload_len);
-
-  pxe_buffer_writer writer;
-
-  writer.buffer = buffer;
-  writer.buffer->data = payload;
-  writer.buffer->size = payload_len;
-  writer.write_pos = 0;
-
-  if (pxe_buffer_write_length_string(&writer, data, data_len) == 0) {
-    return 0;
-  }
-
-  if (pxe_buffer_write_u8(&writer, position) == 0) {
-    return 0;
-  }
+  pxe_buffer* buffer =
+      pxe_serialize_play_chat(trans_arena, message, message_len, color);
 
   for (size_t i = 0; i < server->session_count; ++i) {
     pxe_session* session = server->sessions + i;

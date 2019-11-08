@@ -6,7 +6,7 @@ ifeq ($(OS), Windows_NT)
 	LIBS += -lws2_32
 endif
 
-WIN32_SRC=$(shell find src -maxdepth 1 -type f -name *.c)
+WIN32_SRC=$(shell find src -maxdepth 2 -type f -name *.c)
 
 
 .PHONY: clean

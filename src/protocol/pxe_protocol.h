@@ -1,7 +1,7 @@
 #ifndef PIXIE_PROTOCOL_H_
 #define PIXIE_PROTOCOL_H_
 
-#include "pixie.h"
+#include "../pixie.h"
 
 typedef enum {
   PXE_PROTOCOL_STATE_HANDSHAKING = 0,
@@ -57,5 +57,8 @@ typedef enum {
   PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_ABILITIES = 0x31,
   PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_POSITION_AND_LOOK = 0x35,
 } pxe_protocol_outbound_play_id;
+
+struct pxe_memory_arena;
+struct pxe_session;
 
 #endif

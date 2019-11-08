@@ -60,4 +60,6 @@ bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer,
 bool32 pxe_buffer_write_raw_string(pxe_buffer_writer* writer, const char* data,
                                    size_t length);
 
+pxe_buffer_writer pxe_buffer_writer_create(struct pxe_memory_arena* arena, size_t size);
+
 #endif
