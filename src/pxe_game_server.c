@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifndef _WIN32
 #include <time.h>
@@ -1167,7 +1168,7 @@ void pxe_game_server_epoll(pxe_game_server* game_server,
 
         pxe_session* session = game_server->sessions + index;
 
-        session->protocol_state = PXE_PROTOCOL_STATE_HANDSHAKE;
+        session->protocol_state = PXE_PROTOCOL_STATE_HANDSHAKING;
         session->socket = new_socket;
         session->buffer_reader.read_pos = 0;
         session->buffer_reader.chain = NULL;

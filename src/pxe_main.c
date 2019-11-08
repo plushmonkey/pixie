@@ -6,6 +6,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+int sprintf_s(char* str, size_t str_size, const char* format, ...) {
+  va_list args;
+
+  va_start(args, format);
+
+  int result = vsprintf(str, format, args);
+
+  va_end(args);
+
+  return result;
+}
+
 int main(int argc, char* argv[]) {
 #ifdef _WIN32
   WSADATA wsa;

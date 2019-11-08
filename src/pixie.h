@@ -31,20 +31,7 @@ inline size_t pxe_bitset_count(u32 value) {
 }
 
 #ifndef _MSC_VER
-
-#include <stdio.h>
-
-int sprintf_s(char* str, size_t str_size, const char* format, ...) {
-  va_list args;
-
-  va_start(args, format);
-
-  int result = vsprintf(str, format, args);
-
-  va_end(args);
-
-  return result;
-}
+int sprintf_s(char* str, size_t str_size, const char* format, ...);
 #endif
 
 #endif

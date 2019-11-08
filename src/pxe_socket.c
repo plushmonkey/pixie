@@ -16,10 +16,6 @@
 #define PXE_WOULDBLOCK EWOULDBLOCK
 #endif
 
-#ifndef _MSC_VER
-int sprintf_s(char* str, size_t str_size, char* format, ...);
-#endif
-
 static int pxe_get_error_code() {
 #if defined(_WIN32) || defined(WIN32)
   int err = WSAGetLastError();
