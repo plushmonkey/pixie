@@ -2,6 +2,8 @@
 #define PIXIE_BUFFER_H_
 
 #include "pixie.h"
+#include "pxe_alloc.h"
+#include "pxe_varint.h"
 
 struct pxe_memory_arena;
 
@@ -60,6 +62,89 @@ bool32 pxe_buffer_write_length_string(pxe_buffer_writer* writer,
 bool32 pxe_buffer_write_raw_string(pxe_buffer_writer* writer, const char* data,
                                    size_t length);
 
-pxe_buffer_writer pxe_buffer_writer_create(struct pxe_memory_arena* arena, size_t size);
+inline bool32 pxe_buffer_push_u8(pxe_buffer_writer* writer, u8 data,
+                                 struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, sizeof(data));
+  writer->buffer->size += sizeof(data);
+
+  return pxe_buffer_write_u8(writer, data);
+}
+
+inline bool32 pxe_buffer_push_u16(pxe_buffer_writer* writer, u16 data,
+                                  struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, sizeof(data));
+  writer->buffer->size += sizeof(data);
+
+  return pxe_buffer_write_u16(writer, data);
+}
+
+inline bool32 pxe_buffer_push_u32(pxe_buffer_writer* writer, u32 data,
+                                  struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, sizeof(data));
+  writer->buffer->size += sizeof(data);
+
+  return pxe_buffer_write_u32(writer, data);
+}
+
+inline bool32 pxe_buffer_push_u64(pxe_buffer_writer* writer, u64 data,
+                                  struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, sizeof(data));
+  writer->buffer->size += sizeof(data);
+
+  return pxe_buffer_write_u64(writer, data);
+}
+
+inline bool32 pxe_buffer_push_varint(pxe_buffer_writer* writer, i32 data,
+                                     struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, pxe_varint_size(data));
+  writer->buffer->size += pxe_varint_size(data);
+
+  return pxe_buffer_write_varint(writer, data);
+}
+
+inline bool32 pxe_buffer_push_varlong(pxe_buffer_writer* writer, i64 data,
+                                      struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, pxe_varlong_size(data));
+  writer->buffer->size += pxe_varlong_size(data);
+
+  return pxe_buffer_write_varlong(writer, data);
+}
+
+inline bool32 pxe_buffer_push_float(pxe_buffer_writer* writer, float data,
+                                    struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, sizeof(data));
+  writer->buffer->size += sizeof(data);
+
+  return pxe_buffer_write_float(writer, data);
+}
+
+inline bool32 pxe_buffer_push_double(pxe_buffer_writer* writer, double data,
+                                     struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, sizeof(data));
+  writer->buffer->size += sizeof(data);
+
+  return pxe_buffer_write_double(writer, data);
+}
+
+inline bool32 pxe_buffer_push_length_string(pxe_buffer_writer* writer,
+                                            const char* data, size_t length,
+                                            struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, pxe_varint_size((i32)length) + length);
+  writer->buffer->size += pxe_varint_size((i32)length) + length;
+
+  return pxe_buffer_write_length_string(writer, data, length);
+}
+
+inline bool32 pxe_buffer_push_raw_string(pxe_buffer_writer* writer,
+                                         const char* data, size_t length,
+                                         struct pxe_memory_arena* arena) {
+  pxe_arena_alloc_unaligned(arena, length);
+  writer->buffer->size += length;
+
+  return pxe_buffer_write_raw_string(writer, data, length);
+}
+
+pxe_buffer_writer pxe_buffer_writer_create(struct pxe_memory_arena* arena,
+                                           size_t size);
 
 #endif

@@ -108,6 +108,105 @@ struct pxe_buffer* pxe_serialize_play_player_abilities(
   return writer.buffer;
 }
 
+struct pxe_buffer* pxe_serialize_play_player_info(
+    struct pxe_memory_arena* arena, pxe_player_info_action action,
+    pxe_player_info* infos, size_t info_count) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  if (pxe_buffer_push_varint(&writer, (i32)action, arena) == 0) {
+    return NULL;
+  }
+
+  if (pxe_buffer_push_varint(&writer, (i32)info_count, arena) == 0) {
+    return NULL;
+  }
+
+  for (size_t i = 0; i < info_count; ++i) {
+    pxe_player_info* info = infos + i;
+
+    if (pxe_buffer_push_uuid(&writer, &info->uuid, arena) == 0) {
+      return NULL;
+    }
+
+    switch (action) {
+      case PXE_PLAYER_INFO_ADD: {
+        size_t name_len = strlen(info->add.name);
+
+        if (pxe_buffer_push_length_string(&writer, info->add.name, name_len,
+                                          arena) == 0) {
+          return NULL;
+        }
+
+        if (pxe_buffer_push_varint(&writer, (i32)info->add.property_count,
+                                   arena) == 0) {
+          return NULL;
+        }
+
+        for (size_t property_index = 0;
+             property_index < info->add.property_count; ++property_index) {
+          pxe_player_info_add_property* property =
+              info->add.properties + property_index;
+
+          if (pxe_buffer_push_length_string(&writer, property->name,
+                                            property->name_len, arena) == 0) {
+            return NULL;
+          }
+
+          if (pxe_buffer_push_length_string(&writer, property->value,
+                                            property->value_len, arena) == 0) {
+            return NULL;
+          }
+
+          if (pxe_buffer_push_u8(&writer, (u8)property->is_signed, arena) ==
+              0) {
+            return NULL;
+          }
+
+          if (property->is_signed) {
+            if (pxe_buffer_push_length_string(&writer, property->signature,
+                                              property->signature_len,
+                                              arena) == 0) {
+              return NULL;
+            }
+          }
+        }
+
+        if (pxe_buffer_push_varint(&writer, (i32)info->add.gamemode, arena) ==
+            0) {
+          return NULL;
+        }
+
+        if (pxe_buffer_push_varint(&writer, (i32)info->add.ping, arena) == 0) {
+          return NULL;
+        }
+
+        u8 has_display_name = info->add.display_name_size > 0;
+
+        if (pxe_buffer_push_u8(&writer, (u8)has_display_name, arena) == 0) {
+          return NULL;
+        }
+
+        if (has_display_name) {
+          if (pxe_buffer_push_length_string(&writer, info->add.display_name,
+                                            info->add.display_name_size,
+                                            arena) == 0) {
+            return NULL;
+          }
+        }
+      } break;
+      case PXE_PLAYER_INFO_REMOVE: {
+        // Nothing needs to be done here.
+      } break;
+      default: {
+        fprintf(stderr, "player_info type %d not yet implemented.\n", action);
+        return NULL;
+      }
+    }
+  }
+
+  return writer.buffer;
+}
+
 struct pxe_buffer* pxe_serialize_play_position_and_look(
     struct pxe_memory_arena* arena, double x, double y, double z, float yaw,
     float pitch, u8 flags, i32 teleport_id) {

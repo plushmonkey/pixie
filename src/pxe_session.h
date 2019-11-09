@@ -2,15 +2,17 @@
 #define PIXIE_SESSION_H_
 
 #include "pixie.h"
-#include "pxe_buffer.h"
 #include "protocol/pxe_protocol.h"
+#include "pxe_buffer.h"
 #include "pxe_socket.h"
+#include "pxe_uuid.h"
 
 typedef struct pxe_session {
   pxe_protocol_state protocol_state;
   pxe_socket socket;
 
-  char username[20];
+  char username[16];
+  pxe_uuid uuid;
   i64 next_keep_alive;
 
   pxe_buffer_chain_reader buffer_reader;

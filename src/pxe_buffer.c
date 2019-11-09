@@ -593,7 +593,8 @@ bool32 pxe_buffer_write_raw_string(pxe_buffer_writer* writer, const char* data,
   return 1;
 }
 
-pxe_buffer_writer pxe_buffer_writer_create(pxe_memory_arena* arena, size_t size) {
+pxe_buffer_writer pxe_buffer_writer_create(pxe_memory_arena* arena,
+                                           size_t size) {
   pxe_buffer_writer writer;
 
   pxe_buffer* buffer = pxe_arena_push_type(arena, pxe_buffer);

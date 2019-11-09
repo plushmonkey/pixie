@@ -11,16 +11,15 @@ void pxe_arena_initialize(pxe_memory_arena* arena, void* memory,
 }
 
 void* pxe_arena_alloc(pxe_memory_arena* arena, size_t size) {
-  void* result = arena->current;
-
   size_t adj = sizeof(uintptr_t) - 1;
 
-  size = (size + adj) & ~(uintptr_t)adj;
+  void* result = (u8*)(((uintptr_t)arena->current + adj) & ~(uintptr_t)adj);
 
-  assert(arena->size + size < arena->max_size);
+  arena->current = (u8*)result + size;
+  arena->size = (uintptr_t)arena->current - (uintptr_t)arena->base;
 
-  arena->current = (u8*)arena->current + size;
-  arena->size += size;
+  assert(arena->size <= arena->max_size);
+  assert(((uintptr_t)result & (sizeof(uintptr_t) - 1)) == 0);
 
   return result;
 }

@@ -448,6 +448,71 @@ bool32 pxe_game_send_join_packet(pxe_session* session,
   return 1;
 }
 
+bool32 pxe_game_send_existing_player_info(pxe_game_server* server,
+                                          pxe_session* session,
+                                          pxe_memory_arena* trans_arena) {
+  pxe_player_info* infos = pxe_arena_alloc(trans_arena, 0);
+  size_t info_count = 0;
+
+  for (size_t i = 0; i < server->session_count; ++i) {
+    pxe_session* existing_session = server->sessions + i;
+
+    if (existing_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) {
+      continue;
+    }
+
+    pxe_player_info* info = pxe_arena_push_type(trans_arena, pxe_player_info);
+
+    memset(info, 0, sizeof(pxe_player_info));
+    info->uuid = existing_session->uuid;
+
+    pxe_strcpy(info->add.name, existing_session->username);
+    ++info_count;
+  }
+
+  pxe_buffer* buffer = pxe_serialize_play_player_info(
+      trans_arena, PXE_PLAYER_INFO_ADD, infos, info_count);
+
+  for (size_t i = 0; i < server->session_count; ++i) {
+    pxe_session* target_session = server->sessions + i;
+
+    if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
+
+    pxe_send_packet(&target_session->socket, trans_arena,
+                    PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_INFO, buffer);
+  }
+
+  return 1;
+}
+
+bool32 pxe_game_broadcast_player_info(pxe_game_server* server,
+                                      pxe_session* session,
+                                      pxe_player_info_action action,
+                                      pxe_memory_arena* trans_arena) {
+  pxe_player_info info = {0};
+
+  info.uuid = session->uuid;
+
+  if (action == PXE_PLAYER_INFO_ADD) {
+    pxe_strcpy(info.add.name, session->username);
+  }
+
+  pxe_buffer* buffer =
+      pxe_serialize_play_player_info(trans_arena, action, &info, 1);
+
+  for (size_t i = 0; i < server->session_count; ++i) {
+    pxe_session* target_session = server->sessions + i;
+
+    if (target_session == session) continue;
+    if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
+
+    pxe_send_packet(&target_session->socket, trans_arena,
+                    PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_INFO, buffer);
+  }
+
+  return 1;
+}
+
 bool32 pxe_game_server_send_chat(pxe_game_server* server,
                                  pxe_memory_arena* trans_arena, char* message,
                                  size_t message_len, char* color) {
@@ -593,11 +658,10 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
         pxe_strcpy(session->username, username);
 
-        // printf("Login request from %s.\n", username);
-
-#if 1
         char uuid[36];
         pxe_generate_uuid(uuid);
+
+        session->uuid = pxe_uuid_create_from_string(uuid, 1);
 
         size_t response_size = pxe_varint_size((i32)username_len) +
                                username_len + pxe_varint_size(36) + 36;
@@ -637,14 +701,21 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
           printf("Failed to send player abilities packet.\n");
         }
 
-#if 1
         if (pxe_game_send_position_and_look(session, trans_arena, 5.0f, 68.0f,
                                             5.0f) == 0) {
           fprintf(stderr, "Failed to send position\n");
         }
-#endif
 
-#if 1
+        if (pxe_game_send_existing_player_info(game_server, session,
+                                               trans_arena) == 0) {
+          fprintf(stderr, "Failed to send existing player info.\n");
+        }
+
+        if (pxe_game_broadcast_player_info(
+                game_server, session, PXE_PLAYER_INFO_ADD, trans_arena) == 0) {
+          fprintf(stderr, "Failed to broadcast player info.\n");
+        }
+
         // Send terrain
         for (i32 z = -5; z < 6; ++z) {
           for (i32 x = -5; x < 6; ++x) {
@@ -661,24 +732,6 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
             }
           }
         }
-#endif
-
-#else
-        size_t data_size = array_size(pxe_login_response);
-        size_t response_size = pxe_varint_size(data_size) + data_size;
-        char* response_str = pxe_arena_alloc(trans_arena, response_size);
-
-        // Send disconnect message
-        write_string(response_str, pxe_login_response, data_size);
-
-        pxe_buffer buffer;
-        buffer.data = (u8*)response_str;
-        buffer.size = response_size;
-
-        pxe_send_packet(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_DISCONNECT, &buffer);
-        return PXE_PROCESS_RESULT_DESTROY;
-#endif
       } break;
       default: {
         fprintf(stderr, "Received unhandled packet %d in state %d\n", pkt_id,
@@ -987,6 +1040,15 @@ bool32 pxe_game_server_read_session(pxe_game_server* game_server,
   return process_result != PXE_PROCESS_RESULT_DESTROY;
 }
 
+void pxe_game_server_on_disconnect(pxe_game_server* server,
+                                   pxe_session* session,
+                                   pxe_memory_arena* arena) {
+  if (pxe_game_broadcast_player_info(server, session, PXE_PLAYER_INFO_REMOVE,
+                                     arena) == 0) {
+    fprintf(stderr, "Failed to broadcast player info leave");
+  }
+}
+
 void pxe_game_server_tick(pxe_game_server* server, pxe_memory_arena* perm_arena,
                           pxe_memory_arena* trans_arena) {
   i64 current_time = pxe_get_time_ms();
@@ -1107,6 +1169,8 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
 
         if (pxe_game_server_read_session(game_server, perm_arena, trans_arena,
                                          session) == 0) {
+          pxe_game_server_on_disconnect(game_server, session, trans_arena);
+
           pxe_session_free(session, game_server);
           pxe_socket_disconnect(&session->socket);
 
@@ -1195,6 +1259,8 @@ void pxe_game_server_epoll(pxe_game_server* game_server,
 
       if (pxe_game_server_read_session(game_server, perm_arena, trans_arena,
                                        session) == 0) {
+        pxe_game_server_on_disconnect(game_server, session, trans_arena);
+
         pxe_session_free(session, game_server);
         pxe_socket_disconnect(&session->socket);
 
