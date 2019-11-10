@@ -30,6 +30,7 @@ static const char pxe_ping_response[] =
     "{\"text\": \"pixie server\"}}";
 static const char pxe_login_response[] =
     "{\"text\": \"pixie server has no implemented game server.\"}";
+static const char pxe_server_brand[] = "pixie";
 
 static u32 chunk_data[16][16][16];
 static const u32 pxe_chunk_palette[] = {0, 33, 9, 10, 1, 14, 15};
@@ -385,6 +386,29 @@ bool32 pxe_game_send_chunk_data(pxe_session* session,
 
   pxe_send_packet(&session->socket, trans_arena,
                   PXE_PROTOCOL_OUTBOUND_PLAY_CHUNK_DATA, buffer);
+
+  return 1;
+}
+
+bool32 pxe_game_send_brand(pxe_session* session,
+                           pxe_memory_arena* trans_arena) {
+  pxe_buffer* buffer = pxe_serialize_play_plugin_message(
+      trans_arena, "minecraft:brand", (const u8*)pxe_server_brand,
+      pxe_array_string_size(pxe_server_brand));
+
+  pxe_send_packet(&session->socket, trans_arena,
+                  PXE_PROTOCOL_OUTBOUND_PLAY_PLUGIN_MESSAGE, buffer);
+
+  return 1;
+}
+
+bool32 pxe_game_send_time(pxe_game_server* server, pxe_session* session,
+                          pxe_memory_arena* trans_arena) {
+  pxe_buffer* buffer = pxe_serialize_play_time_update(
+      trans_arena, server->world_age, server->world_time);
+
+  pxe_send_packet(&session->socket, trans_arena,
+                  PXE_PROTOCOL_OUTBOUND_PLAY_TIME_UPDATE, buffer);
 
   return 1;
 }
@@ -784,6 +808,8 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
         session->protocol_state = PXE_PROTOCOL_STATE_PLAY;
 
+        pxe_game_send_brand(session, trans_arena);
+
         char join_message[512];
         size_t join_message_len =
             sprintf_s(join_message, pxe_array_size(join_message),
@@ -873,6 +899,17 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
             if (pxe_game_send_position_and_look(session, trans_arena, 5.0f,
                                                 68.0f, 5.0f) == 0) {
               fprintf(stderr, "Failed to send position\n");
+            }
+          } else if (strncmp(message, "/time ", 6) == 0) {
+            char* target_string = message + 6;
+
+            game_server->world_time = strtol(target_string, NULL, 10);
+
+            printf("Set world time to %lld\n", game_server->world_time);
+
+            for (size_t session_index = 0;
+                 session_index < game_server->session_count; ++session_index) {
+              game_server->sessions[session_index].next_keep_alive = 0;
             }
           }
         } else {
@@ -1137,6 +1174,8 @@ pxe_game_server* pxe_game_server_create(pxe_memory_arena* perm_arena) {
   game_server->listen_socket = listen_socket;
   game_server->free_buffers = NULL;
   game_server->next_entity_id = 0;
+  game_server->world_age = 0;
+  game_server->world_time = 0;
 
 #ifndef _WIN32
   game_server->epollfd = epoll_create1(0);
@@ -1208,20 +1247,25 @@ bool32 pxe_game_server_read_session(pxe_game_server* game_server,
 void pxe_game_server_on_disconnect(pxe_game_server* server,
                                    pxe_session* session,
                                    pxe_memory_arena* arena) {
-  if (pxe_game_broadcast_player_info(server, session, PXE_PLAYER_INFO_REMOVE,
-                                     arena) == 0) {
-    fprintf(stderr, "Failed to broadcast player info leave\n");
-  }
+  if (session->protocol_state == PXE_PROTOCOL_STATE_PLAY) {
+    if (pxe_game_broadcast_player_info(server, session, PXE_PLAYER_INFO_REMOVE,
+                                       arena) == 0) {
+      fprintf(stderr, "Failed to broadcast player info leave\n");
+    }
 
-  if (pxe_game_broadcast_destroy_entity(server, session->entity_id, arena) ==
-      0) {
-    fprintf(stderr, "Failed to broadcast entity destroy.\n");
+    if (pxe_game_broadcast_destroy_entity(server, session->entity_id, arena) ==
+        0) {
+      fprintf(stderr, "Failed to broadcast entity destroy.\n");
+    }
   }
 }
 
 void pxe_game_server_tick(pxe_game_server* server, pxe_memory_arena* perm_arena,
                           pxe_memory_arena* trans_arena) {
   i64 current_time = pxe_get_time_ms();
+
+  ++server->world_age;
+  server->world_time = (server->world_time + 1) % 24000;
 
   for (size_t i = 0; i < server->session_count; ++i) {
     pxe_session* session = server->sessions + i;
@@ -1230,6 +1274,7 @@ void pxe_game_server_tick(pxe_game_server* server, pxe_memory_arena* perm_arena,
 
     if (current_time >= session->next_keep_alive) {
       pxe_game_send_keep_alive_packet(session, trans_arena, current_time);
+      pxe_game_send_time(server, session, trans_arena);
 
       session->next_keep_alive = current_time + 10000;
     }
@@ -1289,7 +1334,7 @@ void pxe_game_server_run(pxe_memory_arena* perm_arena,
 
     i64 current_time = pxe_get_time_ms();
 
-    if (current_time > last_tick_time + 50) {
+    if (current_time >= last_tick_time + 50) {
       pxe_game_server_tick(game_server, perm_arena, trans_arena);
       last_tick_time = current_time;
     }

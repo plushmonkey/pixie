@@ -26,6 +26,8 @@ typedef struct pxe_game_server {
 #endif
 
   i32 next_entity_id;
+  u64 world_age;
+  u64 world_time;
 
   struct pxe_buffer_chain* free_buffers;
 } pxe_game_server;

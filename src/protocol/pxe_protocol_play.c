@@ -31,6 +31,17 @@ struct pxe_buffer* pxe_serialize_play_chat(struct pxe_memory_arena* arena,
   return writer.buffer;
 }
 
+struct pxe_buffer* pxe_serialize_play_plugin_message(
+    struct pxe_memory_arena* arena, const char* channel, const u8* data,
+    size_t size) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  pxe_buffer_push_length_string(&writer, channel, strlen(channel), arena);
+  pxe_buffer_push_length_string(&writer, (char*)data, size, arena);
+
+  return writer.buffer;
+}
+
 struct pxe_buffer* pxe_serialize_play_keep_alive(struct pxe_memory_arena* arena,
                                                  i64 id) {
   pxe_buffer_writer writer = pxe_buffer_writer_create(arena, sizeof(u64));
@@ -366,6 +377,16 @@ struct pxe_buffer* pxe_serialize_play_entity_head_look(
   if (pxe_buffer_push_u8(&writer, yaw_data, arena) == 0) {
     return NULL;
   }
+
+  return writer.buffer;
+}
+
+struct pxe_buffer* pxe_serialize_play_time_update(
+    struct pxe_memory_arena* arena, u64 world_age, u64 time) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  pxe_buffer_push_u64(&writer, world_age, arena);
+  pxe_buffer_push_u64(&writer, time, arena);
 
   return writer.buffer;
 }
