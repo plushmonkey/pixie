@@ -117,7 +117,8 @@ bool32 pxe_buffer_write_uuid(struct pxe_buffer_writer* writer, pxe_uuid* uuid) {
 }
 
 static u64 generate_u64() {
-  return ((u64)rand() << 48) | ((u64)rand() << 32) | ((u64)rand() << 16) | (u64)rand();
+  return ((u64)rand() << 48) | ((u64)rand() << 32) | ((u64)rand() << 16) |
+         (u64)rand();
 }
 
 pxe_uuid pxe_uuid_random() {

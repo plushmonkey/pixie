@@ -88,6 +88,11 @@ struct pxe_buffer* pxe_serialize_play_destroy_entities(
 
 // 0x3B
 struct pxe_buffer* pxe_serialize_play_entity_head_look(
-  struct pxe_memory_arena* arena, pxe_entity_id eid, float yaw);
+    struct pxe_memory_arena* arena, pxe_entity_id eid, float yaw);
+
+// 0x56
+struct pxe_buffer* pxe_serialize_play_entity_teleport(
+    struct pxe_memory_arena* arena, pxe_entity_id eid, double x, double y,
+    double z, float yaw, float pitch, bool32 on_ground);
 
 #endif

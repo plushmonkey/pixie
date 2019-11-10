@@ -2,8 +2,7 @@
 #include "pxe_game_server.h"
 
 void pxe_session_initialize(pxe_session* session) {
-  session->protocol_state =
-    PXE_PROTOCOL_STATE_HANDSHAKING;
+  session->protocol_state = PXE_PROTOCOL_STATE_HANDSHAKING;
   session->socket.state = PXE_SOCKET_STATE_DISCONNECTED;
   session->buffer_reader.read_pos = 0;
   session->buffer_reader.chain = NULL;

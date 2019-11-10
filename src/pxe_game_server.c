@@ -463,11 +463,25 @@ bool32 pxe_game_broadcast_player_move(pxe_game_server* server,
   double delta_y = session->y - session->previous_y;
   double delta_z = session->z - session->previous_z;
 
-  pxe_buffer* buffer = pxe_serialize_play_entity_look_and_relative_move(
-      trans_arena, session->entity_id, delta_x, delta_y, delta_z, session->yaw,
-      session->pitch, session->on_ground);
+  pxe_buffer* buffer;
+  pxe_protocol_outbound_play_id pkt_id;
 
-  pxe_buffer* look_buffer = pxe_serialize_play_entity_head_look(trans_arena, session->entity_id, session->yaw);
+  if (delta_x < 8 && delta_y < 8 && delta_z < 8) {
+    buffer = pxe_serialize_play_entity_look_and_relative_move(
+        trans_arena, session->entity_id, delta_x, delta_y, delta_z,
+        session->yaw, session->pitch, session->on_ground);
+
+    pkt_id = PXE_PROTOCOL_OUTBOUND_PLAY_ENTITY_LOOK_AND_RELATIVE_MOVE;
+  } else {
+    buffer = pxe_serialize_play_entity_teleport(
+        trans_arena, session->entity_id, session->x, session->y, session->z,
+        session->yaw, session->pitch, session->on_ground);
+
+    pkt_id = PXE_PROTOCOL_OUTBOUND_PLAY_ENTITY_TELEPORT;
+  }
+
+  pxe_buffer* look_buffer = pxe_serialize_play_entity_head_look(
+      trans_arena, session->entity_id, session->yaw);
 
   for (size_t i = 0; i < server->session_count; ++i) {
     pxe_session* target_session = server->sessions + i;
@@ -475,11 +489,10 @@ bool32 pxe_game_broadcast_player_move(pxe_game_server* server,
     if (target_session == session) continue;
     if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet(&target_session->socket, trans_arena,
-                    PXE_PROTOCOL_OUTBOUND_PLAY_ENTITY_LOOK_AND_RELATIVE_MOVE, buffer);
+    pxe_send_packet(&target_session->socket, trans_arena, pkt_id, buffer);
 
     pxe_send_packet(&target_session->socket, trans_arena,
-      PXE_PROTOCOL_OUTBOUND_PLAY_ENTITY_HEAD_LOOK, look_buffer);
+                    PXE_PROTOCOL_OUTBOUND_PLAY_ENTITY_HEAD_LOOK, look_buffer);
   }
 
   return 1;
