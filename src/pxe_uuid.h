@@ -13,6 +13,9 @@ typedef struct pxe_uuid {
 pxe_uuid pxe_uuid_create(u64 most, u64 least);
 pxe_uuid pxe_uuid_create_from_string(const char* str, bool32 dashes);
 
+// This creates completely random numbers. They aren't valid uuids.
+pxe_uuid pxe_uuid_random();
+
 // TODO: profile this because it's probably really slow and could be improved
 // significantly if it's a problem.
 void pxe_uuid_to_string(pxe_uuid* uuid, char* str, bool32 dashes);

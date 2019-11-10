@@ -47,6 +47,11 @@ struct pxe_buffer* pxe_serialize_play_chat(struct pxe_memory_arena* arena,
                                            char* message, size_t message_size,
                                            char* color);
 
+// 0x05
+struct pxe_buffer* pxe_serialize_play_spawn_player(
+    struct pxe_memory_arena* arena, i32 eid, pxe_uuid* uuid, double x, double y,
+    double z, float yaw, float pitch);
+
 // 0x20
 struct pxe_buffer* pxe_serialize_play_keep_alive(struct pxe_memory_arena* arena,
                                                  i64 id);
@@ -57,6 +62,12 @@ struct pxe_buffer* pxe_serialize_play_join_game(struct pxe_memory_arena* arena,
                                                 i32 dimension, char* level_type,
                                                 i32 view_distance,
                                                 bool32 reduced_debug);
+
+// 0x29
+struct pxe_buffer* pxe_serialize_play_entity_look_and_relative_move(
+    struct pxe_memory_arena* arena, pxe_entity_id eid, double delta_x,
+    double delta_y, double delta_z, float yaw, float pitch, bool32 on_ground);
+
 // 0x31
 struct pxe_buffer* pxe_serialize_play_player_abilities(
     struct pxe_memory_arena* arena, u8 flags, float fly_speed, float fov);
@@ -70,5 +81,13 @@ struct pxe_buffer* pxe_serialize_play_player_info(
 struct pxe_buffer* pxe_serialize_play_position_and_look(
     struct pxe_memory_arena* arena, double x, double y, double z, float yaw,
     float pitch, u8 flags, i32 teleport_id);
+
+// 0x37
+struct pxe_buffer* pxe_serialize_play_destroy_entities(
+    struct pxe_memory_arena* arena, pxe_entity_id* entities, size_t count);
+
+// 0x3B
+struct pxe_buffer* pxe_serialize_play_entity_head_look(
+  struct pxe_memory_arena* arena, pxe_entity_id eid, float yaw);
 
 #endif

@@ -25,6 +25,8 @@ typedef struct pxe_game_server {
   struct epoll_event events[PXE_GAME_SERVER_MAX_SESSIONS];
 #endif
 
+  i32 next_entity_id;
+
   struct pxe_buffer_chain* free_buffers;
 } pxe_game_server;
 

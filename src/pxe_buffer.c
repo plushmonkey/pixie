@@ -342,7 +342,11 @@ bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader,
     data = *(float*)&current->buffer->data[read_index];
   }
 
-  *out = (float)bswap_32((u32)data);
+  u32 int_rep = *(u32*)&data;
+  int_rep = bswap_32(int_rep);
+  data = *(float*)&int_rep;
+
+  *out = data;
 
   reader->read_pos += sizeof(float);
 
@@ -389,7 +393,11 @@ bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader,
     data = *(double*)&current->buffer->data[read_index];
   }
 
-  *out = (double)bswap_64((u64)data);
+  u64 int_rep = *(u64*)&data;
+  int_rep = bswap_64(int_rep);
+  data = *(double*)&int_rep;
+
+  *out = data;
 
   reader->read_pos += sizeof(double);
 

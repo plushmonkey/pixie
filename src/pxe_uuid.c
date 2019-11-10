@@ -58,13 +58,15 @@ pxe_uuid pxe_uuid_create_from_string(const char* str, bool32 dashes) {
   return uuid;
 }
 
+#include <string.h>
+
 void pxe_uuid_to_string(pxe_uuid* uuid, char* str, bool32 dashes) {
   char temp[16];
 
   pxe_buffer_writer writer;
   pxe_buffer buffer;
   buffer.data = (u8*)temp;
-  buffer.size = 0;
+  buffer.size = 16;
   writer.buffer = &buffer;
   writer.write_pos = 0;
 
@@ -74,8 +76,10 @@ void pxe_uuid_to_string(pxe_uuid* uuid, char* str, bool32 dashes) {
   size_t read_index = 0;
   size_t write_index = 0;
 
+  memset(str, 0, 36);
+
   for (size_t i = 0; i < 4; ++i) {
-    sprintf_s(str + write_index, 2, "%02x", (int)temp[read_index++] & 0xFF);
+    sprintf_s(str + write_index, 3, "%02x", (int)temp[read_index++] & 0xFF);
     write_index += 2;
   }
 
@@ -85,7 +89,7 @@ void pxe_uuid_to_string(pxe_uuid* uuid, char* str, bool32 dashes) {
 
   for (u32 j = 0; j < 3; ++j) {
     for (u32 i = 0; i < 2; ++i) {
-      sprintf_s(str + write_index, 2, "%02x", (int)temp[read_index++] & 0xFF);
+      sprintf_s(str + write_index, 3, "%02x", (int)temp[read_index++] & 0xFF);
       write_index += 2;
     }
 
@@ -95,7 +99,7 @@ void pxe_uuid_to_string(pxe_uuid* uuid, char* str, bool32 dashes) {
   }
 
   for (size_t i = 0; i < 6; ++i) {
-    sprintf_s(str + write_index, 2, "%02x", (int)temp[read_index++] & 0xFF);
+    sprintf_s(str + write_index, 3, "%02x", (int)temp[read_index++] & 0xFF);
     write_index += 2;
   }
 }
@@ -110,4 +114,14 @@ bool32 pxe_buffer_write_uuid(struct pxe_buffer_writer* writer, pxe_uuid* uuid) {
   }
 
   return 1;
+}
+
+static u64 generate_u64() {
+  return ((u64)rand() << 48) | ((u64)rand() << 32) | ((u64)rand() << 16) | (u64)rand();
+}
+
+pxe_uuid pxe_uuid_random() {
+  u64 upper = generate_u64();
+  u64 lower = generate_u64();
+  return pxe_uuid_create(upper, lower);
 }

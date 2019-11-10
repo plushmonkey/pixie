@@ -16,6 +16,8 @@ typedef uint64_t u64;
 
 typedef i32 bool32;
 
+typedef i32 pxe_entity_id;
+
 #define pxe_array_size(arr) (sizeof((arr)) / (sizeof(*(arr))))
 #define pxe_array_string_size(arr) (pxe_array_size(arr) - 1)
 
