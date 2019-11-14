@@ -21,16 +21,9 @@ void pxe_session_initialize(pxe_session* session) {
 }
 
 void pxe_session_free(pxe_session* session, pxe_game_server* server) {
-  pxe_buffer_chain* current = session->process_buffer_chain;
+  pxe_buffer_chain* chain = session->process_buffer_chain;
 
-  // Free all of the unprocessed data for this session.
-  while (current) {
-    pxe_buffer_chain* next = current->next;
-
-    pxe_game_free_buffer_chain(server, current);
-
-    current = next;
-  }
+  pxe_pool_free(server->read_pool, chain, 1);
 
   session->buffer_reader.chain = NULL;
   session->buffer_reader.read_pos = 0;

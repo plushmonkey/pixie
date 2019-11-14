@@ -147,4 +147,15 @@ inline bool32 pxe_buffer_push_raw_string(pxe_buffer_writer* writer,
 pxe_buffer_writer pxe_buffer_writer_create(struct pxe_memory_arena* arena,
                                            size_t size);
 
+inline size_t pxe_buffer_chain_count(pxe_buffer_chain* chain) {
+  size_t count = 0;
+
+  while (chain) {
+    ++count;
+    chain = chain->next;
+  }
+
+  return count;
+}
+
 #endif

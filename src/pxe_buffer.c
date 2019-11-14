@@ -121,7 +121,7 @@ bool32 pxe_buffer_chain_read_u16(pxe_buffer_chain_reader* reader, u16* out) {
     current = current->next;
 
     for (size_t i = 0; i < second_len; ++i) {
-      buf[i] = (char)current->buffer->data[i];
+      buf[i + first_len] = (char)current->buffer->data[i];
     }
 
     data = *(u16*)buf;
@@ -167,7 +167,7 @@ bool32 pxe_buffer_chain_read_u32(pxe_buffer_chain_reader* reader, u32* out) {
     current = current->next;
 
     for (size_t i = 0; i < second_len; ++i) {
-      buf[i] = (char)current->buffer->data[i];
+      buf[i + first_len] = (char)current->buffer->data[i];
     }
 
     data = *(u32*)buf;
@@ -213,7 +213,7 @@ bool32 pxe_buffer_chain_read_u64(pxe_buffer_chain_reader* reader, u64* out) {
     current = current->next;
 
     for (size_t i = 0; i < second_len; ++i) {
-      buf[i] = (char)current->buffer->data[i];
+      buf[i + first_len] = (char)current->buffer->data[i];
     }
 
     data = *(u64*)buf;
@@ -244,7 +244,7 @@ bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader,
   *value = 0;
 
   do {
-    if (read_index + i >= current->buffer->size) {
+    if (read_index >= current->buffer->size) {
       if (current->next == NULL) {
         // The buffer doesn't have enough data to fully read this VarInt.
         *value = 0;
@@ -253,12 +253,12 @@ bool32 pxe_buffer_chain_read_varint(pxe_buffer_chain_reader* reader,
 
       read_index = 0;
       current = current->next;
-      continue;
     }
 
-    *value |= (i32)(current->buffer->data[read_index + i] & 0x7F) << shift;
+    *value |= (i32)(current->buffer->data[read_index] & 0x7F) << shift;
     shift += 7;
-  } while ((current->buffer->data[read_index + i++] & 0x80) != 0);
+    ++i;
+  } while ((current->buffer->data[read_index++] & 0x80) != 0);
 
   reader->read_pos += i;
 
@@ -290,12 +290,12 @@ bool32 pxe_buffer_chain_read_varlong(pxe_buffer_chain_reader* reader,
 
       read_index = 0;
       current = current->next;
-      continue;
     }
 
-    *value |= (i64)(current->buffer->data[read_index + i] & 0x7F) << shift;
+    *value |= (i64)(current->buffer->data[read_index] & 0x7F) << shift;
     shift += 7;
-  } while ((current->buffer->data[read_index + i++] & 0x80) != 0);
+    ++i;
+  } while ((current->buffer->data[read_index++] & 0x80) != 0);
 
   reader->read_pos += i;
 
@@ -334,7 +334,7 @@ bool32 pxe_buffer_chain_read_float(pxe_buffer_chain_reader* reader,
     current = current->next;
 
     for (size_t i = 0; i < second_len; ++i) {
-      buf[i] = (char)current->buffer->data[i];
+      buf[i + first_len] = (char)current->buffer->data[i];
     }
 
     data = *(float*)buf;
@@ -385,7 +385,7 @@ bool32 pxe_buffer_chain_read_double(pxe_buffer_chain_reader* reader,
     current = current->next;
 
     for (size_t i = 0; i < second_len; ++i) {
-      buf[i] = (char)current->buffer->data[i];
+      buf[i + first_len] = (char)current->buffer->data[i];
     }
 
     data = *(double*)buf;

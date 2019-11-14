@@ -14,6 +14,7 @@
 #include <time.h>
 #endif
 
+// Must be at least 8
 #define PXE_READ_BUFFER_SIZE 64
 #define PXE_OUTPUT_CONNECTIONS 0
 #define PXE_BUFFER_CHAIN_PACKET 0
@@ -112,30 +113,6 @@ void pxe_strcpy(char* dest, char* src) {
     *dest++ = *src++;
   }
   *dest = *src;
-}
-
-pxe_buffer_chain* pxe_game_get_read_buffer_chain(pxe_game_server* server,
-                                                 pxe_memory_arena* perm_arena) {
-  if (server->free_buffers == NULL) {
-    pxe_buffer_chain* chain = pxe_arena_push_type(perm_arena, pxe_buffer_chain);
-    pxe_buffer* buffer = pxe_arena_push_type(perm_arena, pxe_buffer);
-    u8* data = pxe_arena_alloc(perm_arena, PXE_READ_BUFFER_SIZE);
-
-    buffer->data = data;
-    buffer->size = 0;
-
-    chain->buffer = buffer;
-    chain->next = NULL;
-
-    return chain;
-  }
-
-  pxe_buffer_chain* head = server->free_buffers;
-
-  server->free_buffers = head->next;
-  head->next = NULL;
-
-  return head;
 }
 
 bool32 pxe_game_create_heightmap_nbt(pxe_nbt_tag_compound** root,
@@ -1190,7 +1167,7 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
     pxe_buffer_chain* next = current->next;
 
-    pxe_game_free_buffer_chain(game_server, current);
+    pxe_pool_free(game_server->read_pool, current, 0);
 
     current = next;
 
@@ -1243,10 +1220,10 @@ pxe_game_server* pxe_game_server_create(pxe_memory_arena* perm_arena) {
 
   game_server->session_count = 0;
   game_server->listen_socket = listen_socket;
-  game_server->free_buffers = NULL;
   game_server->next_entity_id = 0;
   game_server->world_age = 0;
   game_server->world_time = 0;
+  game_server->read_pool = pxe_pool_create(perm_arena, PXE_READ_BUFFER_SIZE);
 
 #ifndef _WIN32
   game_server->epollfd = epoll_create1(0);
@@ -1270,8 +1247,7 @@ bool32 pxe_game_server_read_session(pxe_game_server* game_server,
                                     pxe_memory_arena* trans_arena,
                                     pxe_session* session) {
   pxe_socket* socket = &session->socket;
-  pxe_buffer_chain* buffer_chain =
-      pxe_game_get_read_buffer_chain(game_server, perm_arena);
+  pxe_buffer_chain* buffer_chain = pxe_pool_alloc(game_server->read_pool);
   pxe_buffer* buffer = buffer_chain->buffer;
 
   buffer->size =

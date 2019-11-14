@@ -29,17 +29,11 @@ typedef struct pxe_game_server {
   u64 world_age;
   u64 world_time;
 
-  struct pxe_buffer_chain* free_buffers;
+  pxe_pool* read_pool;
 } pxe_game_server;
 
 pxe_game_server* pxe_game_server_create(struct pxe_memory_arena* perm_arena);
 void pxe_game_server_run(struct pxe_memory_arena* perm_arena,
                          struct pxe_memory_arena* trans_arena);
-
-inline void pxe_game_free_buffer_chain(pxe_game_server* server,
-                                       pxe_buffer_chain* chain) {
-  chain->next = server->free_buffers;
-  server->free_buffers = chain;
-}
 
 #endif
