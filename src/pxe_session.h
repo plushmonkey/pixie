@@ -7,6 +7,15 @@
 #include "pxe_socket.h"
 #include "pxe_uuid.h"
 
+typedef enum {
+  PXE_GAMEMODE_SURVIVAL = 0x00,
+  PXE_GAMEMODE_CREATIVE,
+  PXE_GAMEMODE_ADVENTURE,
+  PXE_GAMEMODE_SPECTATOR,
+
+  PXE_GAMEMODE_COUNT
+} pxe_gamemode;
+
 typedef struct pxe_session {
   pxe_protocol_state protocol_state;
   pxe_socket socket;
@@ -16,6 +25,8 @@ typedef struct pxe_session {
   pxe_uuid uuid;
   i64 next_keep_alive;
   i64 next_position_broadcast;
+
+  pxe_gamemode gamemode;
 
   double previous_x;
   double previous_y;

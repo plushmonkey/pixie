@@ -42,6 +42,10 @@ typedef struct pxe_player_info {
   };
 } pxe_player_info;
 
+typedef enum {
+  PXE_CHANGE_GAME_STATE_REASON_GAMEMODE = 0x03,
+} pxe_change_game_state_reason;
+
 // 0x03
 struct pxe_buffer* pxe_serialize_play_chat(struct pxe_memory_arena* arena,
                                            char* message, size_t message_size,
@@ -56,6 +60,11 @@ struct pxe_buffer* pxe_serialize_play_spawn_player(
 struct pxe_buffer* pxe_serialize_play_plugin_message(
     struct pxe_memory_arena* arena, const char* channel, const u8* data,
     size_t size);
+
+// 0x1E
+struct pxe_buffer* pxe_serialize_play_change_game_state(
+    struct pxe_memory_arena* arena, pxe_change_game_state_reason reason,
+    float value);
 
 // 0x20
 struct pxe_buffer* pxe_serialize_play_keep_alive(struct pxe_memory_arena* arena,

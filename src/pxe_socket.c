@@ -203,8 +203,31 @@ size_t pxe_socket_send_chain(pxe_socket* socket, struct pxe_memory_arena* arena,
 
   return sent;
 #else
-  fprintf(stderr, "Not implemented");
-  return 0;
+  struct iovec* io_buffers = pxe_arena_push_type(arena, struct iovec);
+  struct iovec* cur_buf = io_buffers;
+  size_t num_buffers = 0;
+
+  do {
+    cur_buf->iov_base = chain->buffer->data;
+    cur_buf->iov_len = chain->buffer->size;
+
+    ++num_buffers;
+
+    cur_buf = pxe_arena_push_type(arena, struct iovec);
+
+    chain = chain->next;
+  } while (chain);
+
+  ssize_t sent;
+
+  sent = writev(socket->fd, io_buffers, num_buffers);
+
+  if (sent < 0) {
+    int err = errno;
+    fprintf(stderr, "Error using writev: %d\n", err);
+  }
+
+  return sent;
 #endif
 }
 

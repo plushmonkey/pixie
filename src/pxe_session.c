@@ -17,6 +17,7 @@ void pxe_session_initialize(pxe_session* session) {
   session->pitch = 0;
   session->on_ground = 1;
   session->next_position_broadcast = 0;
+  session->gamemode = PXE_GAMEMODE_SURVIVAL;
 }
 
 void pxe_session_free(pxe_session* session, pxe_game_server* server) {

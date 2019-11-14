@@ -42,6 +42,17 @@ struct pxe_buffer* pxe_serialize_play_plugin_message(
   return writer.buffer;
 }
 
+struct pxe_buffer* pxe_serialize_play_change_game_state(
+    struct pxe_memory_arena* arena, pxe_change_game_state_reason reason,
+    float value) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  pxe_buffer_push_u8(&writer, (u8)reason, arena);
+  pxe_buffer_push_float(&writer, value, arena);
+
+  return writer.buffer;
+}
+
 struct pxe_buffer* pxe_serialize_play_keep_alive(struct pxe_memory_arena* arena,
                                                  i64 id) {
   pxe_buffer_writer writer = pxe_buffer_writer_create(arena, sizeof(u64));

@@ -16,6 +16,7 @@
 
 #define PXE_READ_BUFFER_SIZE 64
 #define PXE_OUTPUT_CONNECTIONS 0
+#define PXE_BUFFER_CHAIN_PACKET 0
 
 typedef enum {
   PXE_PROCESS_RESULT_CONTINUE,
@@ -33,15 +34,37 @@ static const char pxe_login_response[] =
 static const char pxe_server_brand[] = "pixie";
 
 static u32 chunk_data[16][16][16];
-static const u32 pxe_chunk_palette[] = {0, 33, 9, 10, 1, 14, 15};
+// static const u32 pxe_chunk_palette[] = {0, 33, 9, 10, 1, 14, 15};
+static const u32 pxe_chunk_palette[] = {0, 33, 132, 126, 141};
 
-void pxe_send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
+void pxe_send_packet(pxe_socket* socket, pxe_memory_arena* arena, i32 packet_id,
                      pxe_buffer* buffer) {
   if (buffer == NULL) {
     fprintf(stderr, "Packet %d was null when sending.\n", packet_id);
     return;
   }
 
+#if PXE_BUFFER_CHAIN_PACKET
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  // Write total length of payload plus the varint that encodes it.
+  i32 length = (i32)(pxe_varint_size(packet_id) + buffer->size);
+
+  pxe_buffer_push_varint(&writer, length, arena);
+  pxe_buffer_push_varint(&writer, packet_id, arena);
+
+  pxe_buffer_chain header;
+  pxe_buffer_chain payload;
+
+  header.buffer = writer.buffer;
+  header.next = &payload;
+
+  payload.next = NULL;
+  payload.buffer = buffer;
+
+  pxe_socket_send_chain(socket, arena, &header);
+
+#else
   size_t size = buffer->size;
   size_t id_size = pxe_varint_size(packet_id);
   size_t length_size = pxe_varint_size((i32)(size + id_size));
@@ -61,6 +84,7 @@ void pxe_send_packet(pxe_socket* socket, pxe_memory_arena* arena, int packet_id,
   index += size;
 
   pxe_socket_send(socket, pkt, index);
+#endif
 }
 
 void pxe_game_server_wsa_poll(pxe_game_server* game_server,
@@ -179,7 +203,8 @@ bool32 pxe_game_encode_chunk_data(pxe_memory_arena* trans_arena, u64** data,
 
         u64* encoded_segment = encoded + index;
 
-        *encoded_segment |= ((u64)full_block_data << (u64)offset);
+        *encoded_segment |=
+            ((u64)full_block_data << (u64)(64 - bits_per_block - offset));
 
         bit_index += bits_per_block;
       }
@@ -402,6 +427,20 @@ bool32 pxe_game_send_brand(pxe_session* session,
   return 1;
 }
 
+bool32 pxe_game_change_game_state(pxe_session* session,
+                                  pxe_memory_arena* trans_arena,
+                                  pxe_gamemode gamemode) {
+  session->gamemode = gamemode;
+
+  pxe_buffer* buffer = pxe_serialize_play_change_game_state(
+      trans_arena, PXE_CHANGE_GAME_STATE_REASON_GAMEMODE, (float)gamemode);
+
+  pxe_send_packet(&session->socket, trans_arena,
+                  PXE_PROTOCOL_OUTBOUND_PLAY_CHANGE_GAME_STATE, buffer);
+
+  return 1;
+}
+
 bool32 pxe_game_send_time(pxe_game_server* server, pxe_session* session,
                           pxe_memory_arena* trans_arena) {
   pxe_buffer* buffer = pxe_serialize_play_time_update(
@@ -415,11 +454,12 @@ bool32 pxe_game_send_time(pxe_game_server* server, pxe_session* session,
 
 bool32 pxe_game_send_position_and_look(pxe_session* session,
                                        pxe_memory_arena* trans_arena, double x,
-                                       double y, double z) {
+                                       double y, double z, float yaw,
+                                       float pitch) {
   static i32 next_teleport_id = 1;
 
   pxe_buffer* buffer = pxe_serialize_play_position_and_look(
-      trans_arena, x, y, z, 0.0f, 0.0f, 0, next_teleport_id++);
+      trans_arena, x, y, z, yaw, pitch, 0, next_teleport_id++);
 
   pxe_send_packet(&session->socket, trans_arena,
                   PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_POSITION_AND_LOOK, buffer);
@@ -588,6 +628,7 @@ bool32 pxe_game_broadcast_destroy_entity(pxe_game_server* server,
   for (size_t i = 0; i < server->session_count; ++i) {
     pxe_session* target_session = server->sessions + i;
 
+    if (target_session->entity_id == eid) continue;
     if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
     pxe_send_packet(&target_session->socket, trans_arena,
@@ -775,7 +816,9 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
         pxe_uuid_to_string(&session->uuid, uuid, 1);
 
+#if 0
         printf("%s uuid: %s\n", session->username, uuid);
+#endif
 
         size_t response_size = pxe_varint_size((i32)username_len) +
                                username_len + pxe_varint_size(36) + 36;
@@ -796,14 +839,18 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
                         PXE_PROTOCOL_OUTBOUND_LOGIN_SUCCESS, &buffer);
 
         session->entity_id = game_server->next_entity_id++;
-        session->previous_x = session->x = 0;
-        session->previous_y = session->y = 68;
-        session->previous_z = session->z = 0;
 
+        i32 spawn_radius = 30;
+        session->previous_x = session->x =
+            (rand() % (spawn_radius * 2)) - spawn_radius;
+        session->previous_y = session->y = 68;
+        session->previous_z = session->z =
+            (rand() % (spawn_radius * 2)) - spawn_radius;
+
+        session->yaw = (float)(rand() % 360);
+        session->pitch = (float)((rand() % 30) - 30);
         if (!pxe_game_send_join_packet(session, trans_arena)) {
           fprintf(stderr, "Error writing join packet.\n");
-        } else {
-          printf("Sent join packet to %s\n", username);
         }
 
         session->protocol_state = PXE_PROTOCOL_STATE_PLAY;
@@ -822,8 +869,9 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
           printf("Failed to send player abilities packet.\n");
         }
 
-        if (pxe_game_send_position_and_look(session, trans_arena, session->x,
-                                            session->y, session->z) == 0) {
+        if (pxe_game_send_position_and_look(
+                session, trans_arena, session->x, session->y, session->z,
+                session->yaw, session->pitch) == 0) {
           fprintf(stderr, "Failed to send position\n");
         }
 
@@ -848,8 +896,9 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         }
 
         // Send terrain
-        for (i32 z = -5; z < 6; ++z) {
-          for (i32 x = -5; x < 6; ++x) {
+        i32 terrain_radius = 5;
+        for (i32 z = -terrain_radius; z < terrain_radius + 1; ++z) {
+          for (i32 x = -terrain_radius; x < terrain_radius + 1; ++x) {
             bool32 blank = 0;
 
             float r = (float)(x * x + z * z);
@@ -897,7 +946,7 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         if (message_len > 0 && message[0] == '/') {
           if (strcmp(message, "/spawn") == 0) {
             if (pxe_game_send_position_and_look(session, trans_arena, 5.0f,
-                                                68.0f, 5.0f) == 0) {
+                                                68.0f, 5.0f, 0.0f, 0.0f) == 0) {
               fprintf(stderr, "Failed to send position\n");
             }
           } else if (strncmp(message, "/time ", 6) == 0) {
@@ -905,13 +954,20 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
             game_server->world_time = strtol(target_string, NULL, 10);
 
-            printf("Set world time to %lld\n", game_server->world_time);
-
             for (size_t session_index = 0;
                  session_index < game_server->session_count; ++session_index) {
               game_server->sessions[session_index].next_keep_alive = 0;
             }
+          } else if (strncmp(message, "/gm ", 4) == 0) {
+            long gamemode = strtol(message + 4, NULL, 10);
+
+            if (gamemode >= PXE_GAMEMODE_SURVIVAL &&
+                gamemode < PXE_GAMEMODE_COUNT) {
+              pxe_game_change_game_state(session, trans_arena,
+                                         (pxe_gamemode)gamemode);
+            }
           }
+
         } else {
           char output_message[512];
 
@@ -962,8 +1018,6 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         if (pxe_buffer_chain_read_varint(reader, &main_hand) == 0) {
           return PXE_PROCESS_RESULT_CONSUMED;
         }
-
-        printf("Received client settings from %s.\n", session->username);
       } break;
       case PXE_PROTOCOL_INBOUND_PLAY_PLUGIN_MESSAGE: {
         size_t channel_len;
@@ -1001,6 +1055,15 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 #if 0
         return PXE_PROCESS_RESULT_DESTROY;
 #endif
+      } break;
+      case PXE_PROTOCOL_INBOUND_PLAY_KEEP_ALIVE: {
+        u64 id;
+
+        if (pxe_buffer_chain_read_u64(reader, &id) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        // TODO: Verify keep alive id
       } break;
       case PXE_PROTOCOL_INBOUND_PLAY_PLAYER_POSITION: {
         double x;
@@ -1145,17 +1208,25 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 }
 
 pxe_game_server* pxe_game_server_create(pxe_memory_arena* perm_arena) {
+  u32 palette_size = (u32)pxe_array_size(pxe_chunk_palette);
+
   for (size_t z = 0; z < 16; ++z) {
     for (size_t x = 0; x < 16; ++x) {
       chunk_data[0][z][x] = 1;
     }
   }
+
   for (size_t z = 0; z < 16; ++z) {
     for (size_t x = 0; x < 16; ++x) {
-      size_t palette_size = pxe_array_size(pxe_chunk_palette);
-
       chunk_data[1][z][x] = (rand() % (palette_size - 2)) + 2;
     }
+  }
+
+  for (size_t i = 0; i < 16; ++i) {
+    chunk_data[1][0][i] = palette_size - 1;
+    chunk_data[1][i][0] = palette_size - 1;
+    chunk_data[1][i][15] = palette_size - 1;
+    chunk_data[1][15][i] = palette_size - 1;
   }
 
   pxe_socket listen_socket = {0};
@@ -1376,8 +1447,6 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
         new_event->fd = new_socket.fd;
         new_event->events = POLLIN;
         new_event->revents = 0;
-      } else {
-        fprintf(stderr, "Failed to accept new socket\n");
       }
     }
 
@@ -1412,6 +1481,7 @@ void pxe_game_server_wsa_poll(pxe_game_server* game_server,
       }
 
       ++event_index;
+      pxe_arena_reset(trans_arena);
     }
 
     fflush(stdout);

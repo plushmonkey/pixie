@@ -3,6 +3,7 @@
 #include "pxe_alloc.h"
 #include "pxe_game_server.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 
