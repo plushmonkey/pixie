@@ -6,6 +6,7 @@
 #include "pxe_nbt.h"
 #include "pxe_varint.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -155,10 +156,16 @@ bool32 pxe_game_create_heightmap_nbt(pxe_nbt_tag_compound** root,
 }
 
 bool32 pxe_game_encode_chunk_data(pxe_memory_arena* trans_arena, u64** data,
-                                  size_t* chunk_data_size) {
-  // TODO: variable bits_per_block
-  size_t bits_per_block = 8;
-  size_t encoded_size = ((16 * 16 * 16) / 8) * bits_per_block;
+                                  size_t* chunk_data_size, u8* bits_per_block) {
+  u8 bpb = (u8)ceil(log2(pxe_array_size(pxe_chunk_palette)));
+
+  if (bpb < 4) {
+    bpb = 4;
+  }
+
+  *bits_per_block = bpb;
+
+  size_t encoded_size = ((16 * 16 * 16) / 8) * (u64)bpb;
   size_t required_segments = encoded_size / sizeof(u64);
 
   u64* encoded = pxe_arena_alloc(trans_arena, required_segments * sizeof(u64));
@@ -174,18 +181,30 @@ bool32 pxe_game_encode_chunk_data(pxe_memory_arena* trans_arena, u64** data,
   for (size_t y = 0; y < 16; ++y) {
     for (size_t z = 0; z < 16; ++z) {
       for (size_t x = 0; x < 16; ++x) {
-        u32 full_block_data = chunk_data[y][z][x];
-        size_t index = bit_index / (sizeof(u64) * 8);
         size_t offset = bit_index % (sizeof(u64) * 8);
+        size_t index0 = (bit_index / (sizeof(u64) * 8));
+        size_t index1 = ((bit_index + bpb - 1) / (sizeof(u64) * 8));
 
-        u64* encoded_segment = encoded + index;
+        u64* first_segment = encoded + index0;
+        u64* second_segment = encoded + index1;
 
-        *encoded_segment |=
-            ((u64)full_block_data << (u64)(64 - bits_per_block - offset));
+        u64 block_data = chunk_data[y][z][x];
+        u64 first_data = block_data << offset;
 
-        bit_index += bits_per_block;
+        u64 second_mask = ((u64)~0 << (64 - offset)) * (index1 - index0);
+        u64 second_data = (block_data & second_mask) >> (64 - offset);
+
+        *first_segment |= first_data;
+        *second_segment |= second_data;
+
+        bit_index += bpb;
       }
     }
+  }
+
+  for (size_t i = 0; i < required_segments; ++i) {
+    u64* segment = encoded + i;
+    *segment = bswap_64(*segment);
   }
 
   *data = encoded;
@@ -239,15 +258,14 @@ bool32 pxe_game_create_chunk_section(pxe_memory_arena* trans_arena,
     return 0;
   }
 
+  u8 bits_per_block = 4;
   u64* encoded_data;
   size_t encoded_data_size;
 
-  if (pxe_game_encode_chunk_data(trans_arena, &encoded_data,
-                                 &encoded_data_size) == 0) {
+  if (pxe_game_encode_chunk_data(trans_arena, &encoded_data, &encoded_data_size,
+                                 &bits_per_block) == 0) {
     return 0;
   }
-
-  u8 bits_per_block = 8;
 
   size_t encoded_count = encoded_data_size / sizeof(u64);
 

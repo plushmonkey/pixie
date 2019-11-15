@@ -36,4 +36,14 @@ inline size_t pxe_bitset_count(u32 value) {
 int sprintf_s(char* str, size_t str_size, const char* format, ...);
 #endif
 
+#ifdef _MSC_VER
+#define bswap_16(x) _byteswap_ushort(x)
+#define bswap_32(x) _byteswap_ulong(x)
+#define bswap_64(x) _byteswap_uint64(x)
+#else
+#define bswap_16(x) __builtin_bswap16(x)
+#define bswap_32(x) __builtin_bswap32(x)
+#define bswap_64(x) __builtin_bswap64(x)
+#endif
+
 #endif

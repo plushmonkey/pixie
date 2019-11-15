@@ -7,16 +7,6 @@
 
 // TODO: Endianness
 
-#ifdef _MSC_VER
-#define bswap_16(x) _byteswap_ushort(x)
-#define bswap_32(x) _byteswap_ulong(x)
-#define bswap_64(x) _byteswap_uint64(x)
-#else
-#define bswap_16(x) __builtin_bswap16(x)
-#define bswap_32(x) __builtin_bswap32(x)
-#define bswap_64(x) __builtin_bswap64(x)
-#endif
-
 pxe_buffer_chain* pxe_chain_insert(pxe_memory_arena* arena,
                                    pxe_buffer_chain* chain, u8* data,
                                    size_t size) {
