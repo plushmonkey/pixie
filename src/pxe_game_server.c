@@ -20,6 +20,8 @@
 #define PXE_OUTPUT_CONNECTIONS 0
 #define PXE_BUFFER_CHAIN_PACKET 0
 
+//#define PXE_TEST_CHUNK_PALETTE
+
 typedef enum {
   PXE_PROCESS_RESULT_CONTINUE,
   PXE_PROCESS_RESULT_CONSUMED,
@@ -36,8 +38,13 @@ static const char pxe_login_response[] =
 static const char pxe_server_brand[] = "pixie";
 
 static u32 chunk_data[16][16][16];
+
+#ifndef PXE_TEST_CHUNK_PALETTE
 // static const u32 pxe_chunk_palette[] = {0, 33, 9, 10, 1, 14, 15};
 static const u32 pxe_chunk_palette[] = {0, 33, 132, 126, 141};
+#else
+static const u32 pxe_chunk_palette[4096];
+#endif
 
 void pxe_send_packet(pxe_socket* socket, pxe_memory_arena* arena, i32 packet_id,
                      pxe_buffer* buffer) {
@@ -116,6 +123,34 @@ void pxe_strcpy(char* dest, char* src) {
   *dest = *src;
 }
 
+bool32 pxe_game_broadcast(pxe_game_server* server, int pkt_id,
+                          pxe_buffer* buffer, pxe_memory_arena* trans_arena) {
+  for (size_t i = 0; i < server->session_count; ++i) {
+    pxe_session* session = server->sessions + i;
+
+    if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
+
+    pxe_send_packet(&session->socket, trans_arena, pkt_id, buffer);
+  }
+
+  return 1;
+}
+
+bool32 pxe_game_broadcast_except(pxe_game_server* server, pxe_session* except,
+                                 int pkt_id, pxe_buffer* buffer,
+                                 pxe_memory_arena* trans_arena) {
+  for (size_t i = 0; i < server->session_count; ++i) {
+    pxe_session* session = server->sessions + i;
+
+    if (session == except) continue;
+    if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
+
+    pxe_send_packet(&session->socket, trans_arena, pkt_id, buffer);
+  }
+
+  return 1;
+}
+
 bool32 pxe_game_create_heightmap_nbt(pxe_nbt_tag_compound** root,
                                      pxe_memory_arena* trans_arena) {
   static const char motion_blocking[] = "MOTION_BLOCKING";
@@ -161,6 +196,10 @@ bool32 pxe_game_encode_chunk_data(pxe_memory_arena* trans_arena, u64** data,
 
   if (bpb < 4) {
     bpb = 4;
+  }
+
+  if (bpb > 8) {
+    bpb = 14;
   }
 
   *bits_per_block = bpb;
@@ -251,13 +290,6 @@ bool32 pxe_game_create_palette(pxe_memory_arena* trans_arena, u8** palette_data,
 bool32 pxe_game_create_chunk_section(pxe_memory_arena* trans_arena,
                                      u8** chunk_section,
                                      size_t* chunk_section_size) {
-  u8* palette_data;
-  size_t palette_size;
-
-  if (pxe_game_create_palette(trans_arena, &palette_data, &palette_size) == 0) {
-    return 0;
-  }
-
   u8 bits_per_block = 4;
   u64* encoded_data;
   size_t encoded_data_size;
@@ -267,43 +299,33 @@ bool32 pxe_game_create_chunk_section(pxe_memory_arena* trans_arena,
     return 0;
   }
 
+  u8* palette_data = NULL;
+  size_t palette_size = 0;
+
+  if (bits_per_block < 9) {
+    if (pxe_game_create_palette(trans_arena, &palette_data, &palette_size) ==
+        0) {
+      return 0;
+    }
+  }
+
   size_t encoded_count = encoded_data_size / sizeof(u64);
+  pxe_buffer_writer writer = pxe_buffer_writer_create(trans_arena, 0);
 
-  size_t size = sizeof(u16) + sizeof(u8) + palette_size +
-                pxe_varint_size((i32)encoded_count) + encoded_data_size;
-  pxe_buffer* buffer = pxe_arena_push_type(trans_arena, pxe_buffer);
-  u8* payload = pxe_arena_alloc(trans_arena, size);
+  pxe_buffer_push_u16(&writer, 16 * 16, trans_arena);
+  pxe_buffer_push_u8(&writer, bits_per_block, trans_arena);
 
-  pxe_buffer_writer writer;
-  writer.buffer = buffer;
-  writer.buffer->data = payload;
-  writer.buffer->size = size;
-  writer.write_pos = 0;
-
-  if (pxe_buffer_write_u16(&writer, 16 * 16) == 0) {
-    return 0;
+  if (bits_per_block < 9) {
+    pxe_buffer_push_raw_string(&writer, (char*)palette_data, palette_size,
+                               trans_arena);
   }
 
-  if (pxe_buffer_write_u8(&writer, bits_per_block) == 0) {
-    return 0;
-  }
+  pxe_buffer_push_varint(&writer, (i32)encoded_count, trans_arena);
+  pxe_buffer_push_raw_string(&writer, (char*)encoded_data, encoded_data_size,
+                             trans_arena);
 
-  if (pxe_buffer_write_raw_string(&writer, (char*)palette_data, palette_size) ==
-      0) {
-    return 0;
-  }
-
-  if (pxe_buffer_write_varint(&writer, (i32)encoded_count) == 0) {
-    return 0;
-  }
-
-  if (pxe_buffer_write_raw_string(&writer, (char*)encoded_data,
-                                  encoded_data_size) == 0) {
-    return 0;
-  }
-
-  *chunk_section = payload;
-  *chunk_section_size = buffer->size;
+  *chunk_section = writer.buffer->data;
+  *chunk_section_size = writer.buffer->size;
 
   return 1;
 }
@@ -677,6 +699,32 @@ bool32 pxe_game_server_send_chat(pxe_game_server* server,
   }
 
   return 1;
+}
+
+bool32 pxe_game_send_health(pxe_session* session,
+                            pxe_memory_arena* trans_arena) {
+  pxe_buffer* buffer =
+      pxe_serialize_play_update_health(trans_arena, session->health, 20, 5.0f);
+
+  pxe_send_packet(&session->socket, trans_arena,
+                  PXE_PROTOCOL_OUTBOUND_PLAY_UPDATE_HEALTH, buffer);
+
+  return 1;
+}
+
+pxe_session* pxe_game_server_get_session_by_eid(pxe_game_server* game_server,
+                                                i32 eid) {
+  for (size_t i = 0; i < game_server->session_count; ++i) {
+    pxe_session* session = game_server->sessions + i;
+
+    if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
+
+    if (session->entity_id == eid) {
+      return session;
+    }
+  }
+
+  return NULL;
 }
 
 pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
@@ -1152,6 +1200,83 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         session->on_ground = on_ground;
 
       } break;
+      case PXE_PROTOCOL_INBOUND_PLAY_ANIMATION: {
+        i32 hand;
+
+        if (pxe_buffer_chain_read_varint(reader, &hand) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        pxe_animation_type type = PXE_ANIMATION_TYPE_SWING_MAIN;
+        if (hand != 0) {
+          type = PXE_ANIMATION_TYPE_SWING_OFFHAND;
+        }
+
+        // Broadcast swing
+        pxe_buffer* buffer =
+            pxe_serialize_play_animation(trans_arena, session->entity_id, type);
+        pxe_game_broadcast_except(game_server, session,
+                                  PXE_PROTOCOL_OUTBOUND_PLAY_ANIMATION, buffer,
+                                  trans_arena);
+      } break;
+      case PXE_PROTOCOL_INBOUND_PLAY_USE_ENTITY: {
+        i32 target, type;
+
+        if (pxe_buffer_chain_read_varint(reader, &target) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        if (pxe_buffer_chain_read_varint(reader, &type) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        if (type == 2) {
+          float target_x, target_y, target_z;
+
+          if (pxe_buffer_chain_read_float(reader, &target_x) == 0) {
+            return PXE_PROCESS_RESULT_CONSUMED;
+          }
+
+          if (pxe_buffer_chain_read_float(reader, &target_y) == 0) {
+            return PXE_PROCESS_RESULT_CONSUMED;
+          }
+
+          if (pxe_buffer_chain_read_float(reader, &target_z) == 0) {
+            return PXE_PROCESS_RESULT_CONSUMED;
+          }
+        }
+
+        if (type != 1) {
+          i32 hand;
+
+          if (pxe_buffer_chain_read_varint(reader, &hand) == 0) {
+            return PXE_PROCESS_RESULT_CONSUMED;
+          }
+        }
+
+        if (type == 1) {
+          pxe_session* target_session =
+              pxe_game_server_get_session_by_eid(game_server, target);
+          if (target_session != NULL) {
+            i64 time = pxe_get_time_ms();
+
+            if (time > target_session->last_damage_time + 500) {
+              pxe_buffer* buffer = pxe_serialize_play_animation(
+                  trans_arena, target_session->entity_id,
+                  PXE_ANIMATION_TYPE_DAMAGE);
+
+              pxe_game_broadcast(game_server,
+                                 PXE_PROTOCOL_OUTBOUND_PLAY_ANIMATION, buffer,
+                                 trans_arena);
+
+              target_session->health -= 1.0f;
+              pxe_game_send_health(target_session, trans_arena);
+
+              target_session->last_damage_time = time;
+            }
+          }
+        }
+      } break;
       default: {
 #if 1
         fprintf(stderr, "Received unhandled packet %d in state %d\n", pkt_id,
@@ -1203,6 +1328,7 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 }
 
 pxe_game_server* pxe_game_server_create(pxe_memory_arena* perm_arena) {
+#ifndef PXE_TEST_CHUNK_PALETTE
   u32 palette_size = (u32)pxe_array_size(pxe_chunk_palette);
 
   for (size_t z = 0; z < 16; ++z) {
@@ -1223,6 +1349,11 @@ pxe_game_server* pxe_game_server_create(pxe_memory_arena* perm_arena) {
     chunk_data[1][i][15] = palette_size - 1;
     chunk_data[1][15][i] = palette_size - 1;
   }
+#else
+  for (u32 i = 0; i < 16 * 16 * 16; ++i) {
+    *((u32*)chunk_data + i) = i;
+  }
+#endif
 
   pxe_socket listen_socket = {0};
 
@@ -1332,10 +1463,23 @@ void pxe_game_server_tick(pxe_game_server* server, pxe_memory_arena* perm_arena,
   ++server->world_age;
   server->world_time = (server->world_time + 1) % 24000;
 
+  float dt = 50.0f / 1000.0f;
   for (size_t i = 0; i < server->session_count; ++i) {
     pxe_session* session = server->sessions + i;
 
     if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
+
+    i32 prev_discrete_health = (i32)session->health;
+
+    session->health += session->health_regen * dt;
+
+    if (session->health > 20.0f) {
+      session->health = 20.0f;
+    }
+
+    if ((i32)session->health > prev_discrete_health) {
+      pxe_game_send_health(session, trans_arena);
+    }
 
     if (current_time >= session->next_keep_alive) {
       pxe_game_send_keep_alive_packet(session, trans_arena, current_time);

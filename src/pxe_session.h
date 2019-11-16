@@ -25,6 +25,7 @@ typedef struct pxe_session {
   pxe_uuid uuid;
   i64 next_keep_alive;
   i64 next_position_broadcast;
+  i64 last_damage_time;
 
   pxe_gamemode gamemode;
 
@@ -35,6 +36,9 @@ typedef struct pxe_session {
   double x;
   double y;
   double z;
+
+  float health;
+  float health_regen;
 
   float yaw;
   float pitch;

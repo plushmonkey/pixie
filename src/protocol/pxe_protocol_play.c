@@ -31,33 +31,16 @@ struct pxe_buffer* pxe_serialize_play_chat(struct pxe_memory_arena* arena,
   return writer.buffer;
 }
 
-struct pxe_buffer* pxe_serialize_play_plugin_message(
-    struct pxe_memory_arena* arena, const char* channel, const u8* data,
-    size_t size) {
+struct pxe_buffer* pxe_serialize_play_animation(struct pxe_memory_arena* arena,
+                                                i32 eid,
+                                                pxe_animation_type animation) {
   pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
 
-  pxe_buffer_push_length_string(&writer, channel, strlen(channel), arena);
-  pxe_buffer_push_length_string(&writer, (char*)data, size, arena);
+  if (pxe_buffer_push_varint(&writer, eid, arena) == 0) {
+    return NULL;
+  }
 
-  return writer.buffer;
-}
-
-struct pxe_buffer* pxe_serialize_play_change_game_state(
-    struct pxe_memory_arena* arena, pxe_change_game_state_reason reason,
-    float value) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
-
-  pxe_buffer_push_u8(&writer, (u8)reason, arena);
-  pxe_buffer_push_float(&writer, value, arena);
-
-  return writer.buffer;
-}
-
-struct pxe_buffer* pxe_serialize_play_keep_alive(struct pxe_memory_arena* arena,
-                                                 i64 id) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, sizeof(u64));
-
-  if (pxe_buffer_write_u64(&writer, (u64)id) == 0) {
+  if (pxe_buffer_push_u8(&writer, (u8)animation, arena) == 0) {
     return NULL;
   }
 
@@ -102,6 +85,39 @@ struct pxe_buffer* pxe_serialize_play_spawn_player(
 
   // TODO: Serialize metadata here when implemented
   if (pxe_buffer_push_u8(&writer, 0xFF, arena) == 0) {
+    return NULL;
+  }
+
+  return writer.buffer;
+}
+
+struct pxe_buffer* pxe_serialize_play_plugin_message(
+    struct pxe_memory_arena* arena, const char* channel, const u8* data,
+    size_t size) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  pxe_buffer_push_length_string(&writer, channel, strlen(channel), arena);
+  pxe_buffer_push_length_string(&writer, (char*)data, size, arena);
+
+  return writer.buffer;
+}
+
+struct pxe_buffer* pxe_serialize_play_change_game_state(
+    struct pxe_memory_arena* arena, pxe_change_game_state_reason reason,
+    float value) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  pxe_buffer_push_u8(&writer, (u8)reason, arena);
+  pxe_buffer_push_float(&writer, value, arena);
+
+  return writer.buffer;
+}
+
+struct pxe_buffer* pxe_serialize_play_keep_alive(struct pxe_memory_arena* arena,
+                                                 i64 id) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, sizeof(u64));
+
+  if (pxe_buffer_write_u64(&writer, (u64)id) == 0) {
     return NULL;
   }
 
@@ -386,6 +402,25 @@ struct pxe_buffer* pxe_serialize_play_entity_head_look(
   u8 yaw_data = (u8)((yaw / 360.0f) * 256);
 
   if (pxe_buffer_push_u8(&writer, yaw_data, arena) == 0) {
+    return NULL;
+  }
+
+  return writer.buffer;
+}
+
+struct pxe_buffer* pxe_serialize_play_update_health(
+    struct pxe_memory_arena* arena, float health, i32 food, float saturation) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  if (pxe_buffer_push_float(&writer, health, arena) == 0) {
+    return NULL;
+  }
+
+  if (pxe_buffer_push_varint(&writer, food, arena) == 0) {
+    return NULL;
+  }
+
+  if (pxe_buffer_push_float(&writer, saturation, arena) == 0) {
     return NULL;
   }
 

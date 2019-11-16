@@ -8,6 +8,17 @@
 struct pxe_buffer;
 
 typedef enum {
+  PXE_ANIMATION_TYPE_SWING_MAIN = 0x00,
+  PXE_ANIMATION_TYPE_DAMAGE,
+  PXE_ANIMATION_TYPE_LEAVE_BED,
+  PXE_ANIMATION_TYPE_SWING_OFFHAND,
+  PXE_ANIMATION_TYPE_CRITICAL_EFFECT,
+  PXE_ANIMATION_TYPE_MAGIC_CRITICAL_EFFECT,
+
+  PXE_ANIMATION_TYPE_COUNT
+} pxe_animation_type;
+
+typedef enum {
   PXE_PLAYER_INFO_ADD,
   PXE_PLAYER_INFO_UPDATE_GAMEMODE,
   PXE_PLAYER_INFO_UPDATE_LATENCY,
@@ -56,6 +67,11 @@ struct pxe_buffer* pxe_serialize_play_spawn_player(
     struct pxe_memory_arena* arena, i32 eid, pxe_uuid* uuid, double x, double y,
     double z, float yaw, float pitch);
 
+// 0x06
+struct pxe_buffer* pxe_serialize_play_animation(struct pxe_memory_arena* arena,
+                                                i32 eid,
+                                                pxe_animation_type animation);
+
 // 0x18
 struct pxe_buffer* pxe_serialize_play_plugin_message(
     struct pxe_memory_arena* arena, const char* channel, const u8* data,
@@ -103,6 +119,10 @@ struct pxe_buffer* pxe_serialize_play_destroy_entities(
 // 0x3B
 struct pxe_buffer* pxe_serialize_play_entity_head_look(
     struct pxe_memory_arena* arena, pxe_entity_id eid, float yaw);
+
+// 0x48
+struct pxe_buffer* pxe_serialize_play_update_health(
+  struct pxe_memory_arena* arena, float health, i32 food, float saturation);
 
 // 0x4E
 struct pxe_buffer* pxe_serialize_play_time_update(
