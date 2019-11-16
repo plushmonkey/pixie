@@ -102,6 +102,16 @@ struct pxe_buffer* pxe_serialize_play_plugin_message(
   return writer.buffer;
 }
 
+struct pxe_buffer* pxe_serialize_play_entity_status(
+  struct pxe_memory_arena* arena, pxe_entity_id eid, u8 status) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  pxe_buffer_push_u32(&writer, eid, arena);
+  pxe_buffer_push_u8(&writer, status, arena);
+
+  return writer.buffer;
+}
+
 struct pxe_buffer* pxe_serialize_play_change_game_state(
     struct pxe_memory_arena* arena, pxe_change_game_state_reason reason,
     float value) {
@@ -387,6 +397,19 @@ struct pxe_buffer* pxe_serialize_play_destroy_entities(
       return NULL;
     }
   }
+
+  return writer.buffer;
+}
+
+struct pxe_buffer* pxe_serialize_play_respawn(struct pxe_memory_arena* arena,
+                                              i32 dimension,
+                                              pxe_gamemode gamemode,
+                                              char* level_type) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+
+  pxe_buffer_push_u32(&writer, dimension, arena);
+  pxe_buffer_push_u8(&writer, (u8)gamemode, arena);
+  pxe_buffer_push_length_string(&writer, level_type, strlen(level_type), arena);
 
   return writer.buffer;
 }

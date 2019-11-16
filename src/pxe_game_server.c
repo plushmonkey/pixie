@@ -885,10 +885,10 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
         i32 spawn_radius = 30;
         session->previous_x = session->x =
-            (rand() % (spawn_radius * 2)) - spawn_radius;
+            (rand() % (spawn_radius * 2)) - (double)spawn_radius;
         session->previous_y = session->y = 68;
         session->previous_z = session->z =
-            (rand() % (spawn_radius * 2)) - spawn_radius;
+            (rand() % (spawn_radius * 2)) - (double)spawn_radius;
 
         session->yaw = (float)(rand() % 360);
         session->pitch = (float)((rand() % 30) - 30);
@@ -1020,6 +1020,40 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
           pxe_game_server_send_chat(game_server, trans_arena, output_message,
                                     output_message_len, "white");
+        }
+      } break;
+      case PXE_PROTOCOL_INBOUND_PLAY_CLIENT_STATUS: {
+        i32 action;
+
+        if (pxe_buffer_chain_read_varint(reader, &action) == 0) {
+          return PXE_PROCESS_RESULT_CONSUMED;
+        }
+
+        if (action == 0x00) {
+          if (session->health <= 0) {
+            session->health = 20;
+
+            pxe_buffer* buffer = pxe_serialize_play_respawn(
+                trans_arena, 0, PXE_GAMEMODE_SURVIVAL, "default");
+            pxe_send_packet(&session->socket, trans_arena,
+                            PXE_PROTOCOL_OUTBOUND_PLAY_RESPAWN, buffer);
+          }
+
+          session->x = 0;
+          session->y = 66;
+          session->z = 0;
+
+          pxe_game_send_position_and_look(session, trans_arena, session->x,
+                                          session->y, session->z, session->yaw,
+                                          session->pitch);
+
+          pxe_buffer* buffer = pxe_serialize_play_spawn_player(
+              trans_arena, session->entity_id, &session->uuid, session->x,
+              session->y, session->z, session->yaw, session->pitch);
+
+          pxe_game_broadcast_except(game_server, session,
+                                    PXE_PROTOCOL_OUTBOUND_PLAY_SPAWN_PLAYER,
+                                    buffer, trans_arena);
         }
       } break;
       case PXE_PROTOCOL_INBOUND_PLAY_CLIENT_SETTINGS: {
@@ -1260,7 +1294,8 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
           if (target_session != NULL) {
             i64 time = pxe_get_time_ms();
 
-            if (time > target_session->last_damage_time + 500) {
+            if (target_session->health > 0 &&
+                time > target_session->last_damage_time + 500) {
               pxe_buffer* buffer = pxe_serialize_play_animation(
                   trans_arena, target_session->entity_id,
                   PXE_ANIMATION_TYPE_DAMAGE);
@@ -1269,10 +1304,19 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
                                  PXE_PROTOCOL_OUTBOUND_PLAY_ANIMATION, buffer,
                                  trans_arena);
 
-              target_session->health -= 1.0f;
+              target_session->health -= 6.0f;
               pxe_game_send_health(target_session, trans_arena);
 
               target_session->last_damage_time = time;
+
+              if (target_session->health < 0) {
+                pxe_buffer* buffer = pxe_serialize_play_entity_status(
+                    trans_arena, target_session->entity_id, 3);
+
+                pxe_game_broadcast(game_server,
+                                   PXE_PROTOCOL_OUTBOUND_PLAY_ENTITY_STATUS,
+                                   buffer, trans_arena);
+              }
             }
           }
         }
@@ -1469,16 +1513,18 @@ void pxe_game_server_tick(pxe_game_server* server, pxe_memory_arena* perm_arena,
 
     if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    i32 prev_discrete_health = (i32)session->health;
+    if (session->health > 0) {
+      i32 prev_discrete_health = (i32)session->health;
 
-    session->health += session->health_regen * dt;
+      session->health += session->health_regen * dt;
 
-    if (session->health > 20.0f) {
-      session->health = 20.0f;
-    }
+      if (session->health > 20.0f) {
+        session->health = 20.0f;
+      }
 
-    if ((i32)session->health > prev_discrete_health) {
-      pxe_game_send_health(session, trans_arena);
+      if ((i32)session->health > prev_discrete_health) {
+        pxe_game_send_health(session, trans_arena);
+      }
     }
 
     if (current_time >= session->next_keep_alive) {

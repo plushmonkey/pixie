@@ -3,6 +3,7 @@
 
 #include "pxe_protocol.h"
 
+#include "../pxe_session.h"
 #include "../pxe_uuid.h"
 
 struct pxe_buffer;
@@ -77,6 +78,10 @@ struct pxe_buffer* pxe_serialize_play_plugin_message(
     struct pxe_memory_arena* arena, const char* channel, const u8* data,
     size_t size);
 
+// 0x1B
+struct pxe_buffer* pxe_serialize_play_entity_status(
+    struct pxe_memory_arena* arena, pxe_entity_id eid, u8 status);
+
 // 0x1E
 struct pxe_buffer* pxe_serialize_play_change_game_state(
     struct pxe_memory_arena* arena, pxe_change_game_state_reason reason,
@@ -116,13 +121,19 @@ struct pxe_buffer* pxe_serialize_play_position_and_look(
 struct pxe_buffer* pxe_serialize_play_destroy_entities(
     struct pxe_memory_arena* arena, pxe_entity_id* entities, size_t count);
 
+// 0x3A
+struct pxe_buffer* pxe_serialize_play_respawn(struct pxe_memory_arena* arena,
+                                              i32 dimension,
+                                              pxe_gamemode gamemode,
+                                              char* level_type);
+
 // 0x3B
 struct pxe_buffer* pxe_serialize_play_entity_head_look(
     struct pxe_memory_arena* arena, pxe_entity_id eid, float yaw);
 
 // 0x48
 struct pxe_buffer* pxe_serialize_play_update_health(
-  struct pxe_memory_arena* arena, float health, i32 food, float saturation);
+    struct pxe_memory_arena* arena, float health, i32 food, float saturation);
 
 // 0x4E
 struct pxe_buffer* pxe_serialize_play_time_update(
