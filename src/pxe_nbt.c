@@ -13,16 +13,16 @@ void pxe_nbt_tag_compound_add(pxe_nbt_tag_compound* compound, pxe_nbt_tag tag) {
 
 /////////////////////////// NBT parsing
 
-bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
+bool32 pxe_nbt_parse_tag(pxe_buffer_reader* reader, pxe_nbt_tag* tag,
                          pxe_memory_arena* arena);
 bool32 pxe_nbt_write_named_tag(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
                                pxe_memory_arena* arena);
 
-bool32 pxe_nbt_read_length_string(pxe_buffer_chain_reader* reader, char** data,
+bool32 pxe_nbt_read_length_string(pxe_buffer_reader* reader, char** data,
                                   size_t* size, pxe_memory_arena* arena) {
   u16 length;
 
-  if (pxe_buffer_chain_read_u16(reader, &length) == 0) {
+  if (pxe_buffer_read_u16(reader, &length) == 0) {
     return 0;
   }
 
@@ -30,14 +30,14 @@ bool32 pxe_nbt_read_length_string(pxe_buffer_chain_reader* reader, char** data,
 
   *data = pxe_arena_alloc(arena, *size);
 
-  if (pxe_buffer_chain_read_raw_string(reader, *data, *size) == 0) {
+  if (pxe_buffer_read_raw_string(reader, *data, *size) == 0) {
     return 0;
   }
 
   return 1;
 }
 
-bool32 pxe_nbt_parse_compound(pxe_buffer_chain_reader* reader,
+bool32 pxe_nbt_parse_compound(pxe_buffer_reader* reader,
                               pxe_nbt_tag_compound* compound,
                               pxe_memory_arena* arena) {
   compound->ntags = 0;
@@ -45,7 +45,7 @@ bool32 pxe_nbt_parse_compound(pxe_buffer_chain_reader* reader,
   pxe_nbt_tag_type type = PXE_NBT_TAG_TYPE_UNKNOWN;
 
   while (type != PXE_NBT_TAG_TYPE_END) {
-    if (pxe_buffer_chain_read_u8(reader, (u8*)&type) == 0) {
+    if (pxe_buffer_read_u8(reader, (u8*)&type) == 0) {
       return 0;
     }
 
@@ -71,7 +71,7 @@ bool32 pxe_nbt_parse_compound(pxe_buffer_chain_reader* reader,
   return 1;
 }
 
-bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
+bool32 pxe_nbt_parse_tag(pxe_buffer_reader* reader, pxe_nbt_tag* tag,
                          pxe_memory_arena* arena) {
   switch (tag->type) {
     case PXE_NBT_TAG_TYPE_END: {
@@ -79,7 +79,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_BYTE: {
       pxe_nbt_tag_byte* byte_tag = pxe_arena_push_type(arena, pxe_nbt_tag_byte);
 
-      if (pxe_buffer_chain_read_u8(reader, &byte_tag->data) == 0) {
+      if (pxe_buffer_read_u8(reader, &byte_tag->data) == 0) {
         return 0;
       }
 
@@ -89,7 +89,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       pxe_nbt_tag_short* short_tag =
           pxe_arena_push_type(arena, pxe_nbt_tag_short);
 
-      if (pxe_buffer_chain_read_u16(reader, &short_tag->data) == 0) {
+      if (pxe_buffer_read_u16(reader, &short_tag->data) == 0) {
         return 0;
       }
 
@@ -98,7 +98,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_INT: {
       pxe_nbt_tag_int* int_tag = pxe_arena_push_type(arena, pxe_nbt_tag_int);
 
-      if (pxe_buffer_chain_read_u32(reader, &int_tag->data) == 0) {
+      if (pxe_buffer_read_u32(reader, &int_tag->data) == 0) {
         return 0;
       }
 
@@ -107,7 +107,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_LONG: {
       pxe_nbt_tag_long* long_tag = pxe_arena_push_type(arena, pxe_nbt_tag_long);
 
-      if (pxe_buffer_chain_read_u64(reader, &long_tag->data) == 0) {
+      if (pxe_buffer_read_u64(reader, &long_tag->data) == 0) {
         return 0;
       }
 
@@ -117,7 +117,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       pxe_nbt_tag_float* float_tag =
           pxe_arena_push_type(arena, pxe_nbt_tag_float);
 
-      if (pxe_buffer_chain_read_float(reader, &float_tag->data) == 0) {
+      if (pxe_buffer_read_float(reader, &float_tag->data) == 0) {
         return 0;
       }
 
@@ -127,7 +127,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       pxe_nbt_tag_double* double_tag =
           pxe_arena_push_type(arena, pxe_nbt_tag_double);
 
-      if (pxe_buffer_chain_read_double(reader, &double_tag->data) == 0) {
+      if (pxe_buffer_read_double(reader, &double_tag->data) == 0) {
         return 0;
       }
 
@@ -140,7 +140,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       byte_array_tag->length = 0;
       byte_array_tag->data = NULL;
 
-      if (pxe_buffer_chain_read_u32(reader, (u32*)&byte_array_tag->length) ==
+      if (pxe_buffer_read_u32(reader, (u32*)&byte_array_tag->length) ==
           0) {
         return 0;
       }
@@ -149,7 +149,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
           pxe_arena_alloc(arena, byte_array_tag->length * sizeof(u8));
 
       // Read all of the contained bytes in one read.
-      if (pxe_buffer_chain_read_raw_string(reader, (char*)&byte_array_tag->data,
+      if (pxe_buffer_read_raw_string(reader, (char*)&byte_array_tag->data,
                                            byte_array_tag->length) == 0) {
         return 0;
       }
@@ -173,11 +173,11 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       list_tag->length = 0;
       list_tag->tags = NULL;
 
-      if (pxe_buffer_chain_read_u8(reader, (u8*)&list_tag->type) == 0) {
+      if (pxe_buffer_read_u8(reader, (u8*)&list_tag->type) == 0) {
         return 0;
       }
 
-      if (pxe_buffer_chain_read_u32(reader, (u32*)&list_tag->length) == 0) {
+      if (pxe_buffer_read_u32(reader, (u32*)&list_tag->length) == 0) {
         return 0;
       }
 
@@ -226,7 +226,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       int_array_tag->length = 0;
       int_array_tag->data = NULL;
 
-      if (pxe_buffer_chain_read_u32(reader, (u32*)&int_array_tag->length) ==
+      if (pxe_buffer_read_u32(reader, (u32*)&int_array_tag->length) ==
           0) {
         return 0;
       }
@@ -237,7 +237,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       for (size_t i = 0; i < int_array_tag->length; ++i) {
         i32* int_data = int_array_tag->data + i;
 
-        if (pxe_buffer_chain_read_u32(reader, (u32*)int_data) == 0) {
+        if (pxe_buffer_read_u32(reader, (u32*)int_data) == 0) {
           return 0;
         }
       }
@@ -251,7 +251,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       long_array_tag->length = 0;
       long_array_tag->data = NULL;
 
-      if (pxe_buffer_chain_read_u32(reader, (u32*)&long_array_tag->length) ==
+      if (pxe_buffer_read_u32(reader, (u32*)&long_array_tag->length) ==
           0) {
         return 0;
       }
@@ -262,7 +262,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_chain_reader* reader, pxe_nbt_tag* tag,
       for (size_t i = 0; i < long_array_tag->length; ++i) {
         i64* long_data = long_array_tag->data + i;
 
-        if (pxe_buffer_chain_read_u64(reader, (u64*)long_data) == 0) {
+        if (pxe_buffer_read_u64(reader, (u64*)long_data) == 0) {
           return 0;
         }
       }
@@ -288,12 +288,12 @@ bool32 pxe_nbt_parse(char* data, size_t size, pxe_memory_arena* arena,
   chain.buffer = &buffer;
   chain.next = NULL;
 
-  pxe_buffer_chain_reader reader;
+  pxe_buffer_reader reader;
   reader.chain = &chain;
   reader.read_pos = 0;
 
   pxe_nbt_tag_type type = 0;
-  if (pxe_buffer_chain_read_u8(&reader, (u8*)&type) == 0) {
+  if (pxe_buffer_read_u8(&reader, (u8*)&type) == 0) {
     return 0;
   }
 
@@ -319,7 +319,7 @@ bool32 pxe_nbt_write_length_string(pxe_buffer_writer* writer, char* data,
                                    size_t size, pxe_memory_arena* arena) {
   pxe_arena_alloc_unaligned(arena, size + sizeof(u16));
 
-  writer->buffer->size += sizeof(u16) + size;
+  writer->current->buffer->size += sizeof(u16) + size;
 
   if (pxe_buffer_write_u16(writer, (u16)size) == 0) return 0;
 
@@ -332,7 +332,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_BYTE: {
       pxe_nbt_tag_byte* byte_tag = tag->tag;
 
-      writer->buffer->size += sizeof(u8);
+      writer->current->buffer->size += sizeof(u8);
       pxe_arena_alloc_unaligned(arena, sizeof(u8));
 
       if (pxe_buffer_write_u8(writer, byte_tag->data) == 0) {
@@ -342,7 +342,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_SHORT: {
       pxe_nbt_tag_short* short_tag = tag->tag;
 
-      writer->buffer->size += sizeof(u16);
+      writer->current->buffer->size += sizeof(u16);
       pxe_arena_alloc_unaligned(arena, sizeof(u16));
 
       if (pxe_buffer_write_u16(writer, short_tag->data) == 0) {
@@ -352,7 +352,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_INT: {
       pxe_nbt_tag_int* int_tag = tag->tag;
 
-      writer->buffer->size += sizeof(u32);
+      writer->current->buffer->size += sizeof(u32);
       pxe_arena_alloc_unaligned(arena, sizeof(u32));
 
       if (pxe_buffer_write_u32(writer, int_tag->data) == 0) {
@@ -362,7 +362,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_LONG: {
       pxe_nbt_tag_long* long_tag = tag->tag;
 
-      writer->buffer->size += sizeof(u64);
+      writer->current->buffer->size += sizeof(u64);
       pxe_arena_alloc_unaligned(arena, sizeof(u64));
 
       if (pxe_buffer_write_u64(writer, long_tag->data) == 0) {
@@ -372,7 +372,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_FLOAT: {
       pxe_nbt_tag_float* float_tag = tag->tag;
 
-      writer->buffer->size += sizeof(float);
+      writer->current->buffer->size += sizeof(float);
       pxe_arena_alloc_unaligned(arena, sizeof(float));
 
       if (pxe_buffer_write_float(writer, float_tag->data) == 0) {
@@ -382,7 +382,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_DOUBLE: {
       pxe_nbt_tag_double* double_tag = tag->tag;
 
-      writer->buffer->size += sizeof(double);
+      writer->current->buffer->size += sizeof(double);
       pxe_arena_alloc_unaligned(arena, sizeof(double));
 
       if (pxe_buffer_write_double(writer, double_tag->data) == 0) {
@@ -394,7 +394,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
 
       size_t data_size = sizeof(u32) + byte_array_tag->length;
 
-      writer->buffer->size += data_size;
+      writer->current->buffer->size += data_size;
       pxe_arena_alloc_unaligned(arena, data_size);
 
       if (pxe_buffer_write_u32(writer, (u32)byte_array_tag->length) == 0) {
@@ -417,7 +417,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_LIST: {
       pxe_nbt_tag_list* list_tag = tag->tag;
 
-      writer->buffer->size += 1;
+      writer->current->buffer->size += 1;
       pxe_arena_alloc_unaligned(arena, 1);
 
       if (list_tag->length == 0) {
@@ -428,7 +428,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
         return 0;
       }
 
-      writer->buffer->size += sizeof(u32);
+      writer->current->buffer->size += sizeof(u32);
       pxe_arena_alloc_unaligned(arena, sizeof(u32));
 
       if (pxe_buffer_write_u32(writer, (u32)list_tag->length) == 0) {
@@ -463,7 +463,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
 
       size_t data_size = sizeof(u32) + int_array_tag->length * sizeof(u32);
 
-      writer->buffer->size += data_size;
+      writer->current->buffer->size += data_size;
       pxe_arena_alloc_unaligned(arena, data_size);
 
       if (pxe_buffer_write_u32(writer, (u32)int_array_tag->length) == 0) {
@@ -483,7 +483,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
 
       size_t data_size = sizeof(u32) + long_array_tag->length * sizeof(u64);
 
-      writer->buffer->size += data_size;
+      writer->current->buffer->size += data_size;
       pxe_arena_alloc_unaligned(arena, data_size);
 
       if (pxe_buffer_write_u32(writer, (u32)long_array_tag->length) == 0) {
@@ -509,7 +509,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
 bool32 pxe_nbt_write_named_tag(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
                                pxe_memory_arena* arena) {
   pxe_arena_alloc_unaligned(arena, 1);
-  ++writer->buffer->size;
+  ++writer->current->buffer->size;
 
   if (pxe_buffer_write_u8(writer, (u8)tag->type) == 0) {
     return 0;
@@ -534,13 +534,17 @@ bool32 pxe_nbt_write(pxe_nbt_tag_compound* compound, pxe_memory_arena* arena,
   // Beginning allocation should be aligned so the resulting pointer is aligned.
   *out = pxe_arena_alloc(arena, 1);
 
-  pxe_buffer_writer writer;
+  pxe_buffer_writer writer = {0};
+  pxe_buffer_chain current;
   pxe_buffer buffer;
 
   buffer.data = (u8*)*out;
   buffer.size = 1;
-  writer.buffer = &buffer;
-  writer.write_pos = 0;
+
+  current.next = NULL;
+  current.buffer = &buffer;
+
+  writer.current = &current;
 
   if (pxe_buffer_write_u8(&writer, (u8)PXE_NBT_TAG_TYPE_COMPOUND) == 0) {
     return 0;

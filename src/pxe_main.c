@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
   pxe_arena_initialize(&trans_arena, trans_memory, trans_size);
   pxe_arena_initialize(&perm_arena, perm_memory, perm_size);
 
-  pxe_game_server_run(&perm_arena, &trans_arena);
+  //pxe_game_server_run(&perm_arena, &trans_arena);
 
   return 0;
 }
