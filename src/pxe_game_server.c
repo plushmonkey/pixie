@@ -48,8 +48,33 @@ static const u32 pxe_chunk_palette[] = {0, 33, 132, 126, 141};
 static const u32 pxe_chunk_palette[4096];
 #endif
 
-void pxe_send_packet_chain(pxe_socket* socket, pxe_memory_arena* arena,
-                           i32 packet_id, pxe_buffer_chain* chain) {}
+void pxe_send_packet_chain(pxe_socket* socket, pxe_memory_arena* arena, pxe_pool* pool,
+                           i32 packet_id, pxe_buffer_chain* chain, bool32 free) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
+
+  size_t payload_size = pxe_buffer_size(chain);
+
+  // Write total length of payload plus the varint that encodes it.
+  i32 length = (i32)(pxe_varint_size(packet_id) + payload_size);
+
+  pxe_buffer_write_varint(&writer, length);
+  pxe_buffer_write_varint(&writer, packet_id);
+
+  pxe_buffer_chain* last = writer.last;
+  writer.last->next = chain;
+
+  pxe_socket_send_chain(socket, arena, writer.head);
+
+  if (free) {
+    // Free the entire chain including header/payload.
+    pxe_pool_free(pool, writer.head, 1);
+  } else {
+    last->next = NULL;
+    // Free just the header.
+    pxe_pool_free(pool, writer.head, 1);
+  }
+}
+
 void pxe_send_packet(pxe_socket* socket, pxe_memory_arena* arena, i32 packet_id,
                      pxe_buffer* buffer) {
   if (buffer == NULL) {
@@ -134,8 +159,10 @@ bool32 pxe_game_broadcast(pxe_game_server* server, int pkt_id,
 
     if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet_chain(&session->socket, trans_arena, pkt_id, buffer);
+    pxe_send_packet_chain(&session->socket, trans_arena, server->write_pool, pkt_id, buffer, 0);
   }
+
+  pxe_pool_free(server->write_pool, buffer, 1);
 
   return 1;
 }
@@ -149,8 +176,10 @@ bool32 pxe_game_broadcast_except(pxe_game_server* server, pxe_session* except,
     if (session == except) continue;
     if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet_chain(&session->socket, trans_arena, pkt_id, buffer);
+    pxe_send_packet_chain(&session->socket, trans_arena, server->write_pool, pkt_id, buffer, 0);
   }
+
+  pxe_pool_free(server->write_pool, buffer, 1);
 
   return 1;
 }
@@ -217,9 +246,7 @@ pxe_buffer_chain* pxe_game_encode_chunk_data(pxe_memory_arena* perm_arena,
   }
 
   pxe_buffer_chain* chain = pxe_pool_alloc(chunk_pool);
-  //  u64* encoded = pxe_arena_alloc(trans_arena, required_segments *
-  //  sizeof(u64));
-  u64* encoded = (u64*)chain->buffer;
+  u64* encoded = (u64*)chain->buffer->data;
 
   // Clear the segments before writing chunk data into them.
   for (size_t i = 0; i < required_segments; ++i) {
@@ -313,6 +340,7 @@ pxe_buffer_chain* pxe_game_create_chunk_section(pxe_pool* pool,
     writer.current->next = palette_chain;
     writer.current = palette_chain;
     writer.last = palette_chain;
+    writer.relative_write_pos = palette_chain->buffer->size;
   }
 
   pxe_buffer_write_varint(&writer, (i32)encoded_count);
@@ -321,7 +349,10 @@ pxe_buffer_chain* pxe_game_create_chunk_section(pxe_pool* pool,
   pxe_buffer_write_raw_string(&writer, (char*)data_chain->buffer->data,
                               encoded_data_size);
 
-  *size = encoded_data_size + palette_size + sizeof(u16) + sizeof(u8);
+  *size = encoded_data_size + palette_size + sizeof(u16) + sizeof(u8) + pxe_varint_size((i32)encoded_count);
+  size_t test = pxe_buffer_size(writer.head);
+  
+  pxe_pool_free(chunk_pool, data_chain, 1);
 
   return writer.head;
 }
@@ -397,16 +428,27 @@ bool32 pxe_game_send_chunk_data(pxe_session* session, pxe_pool* pool,
   }
 
   for (size_t i = 0; i < chunk_section_count; ++i) {
-    pxe_buffer_chain* current_chain = pxe_pool_alloc(pool);
+    pxe_buffer_chain* current_section = section_chain;
+    
+    while (current_section) {
+      pxe_buffer_chain* current_chain = pxe_pool_alloc(pool);
 
-    // TODO: avoid copy
-    memcpy(current_chain->buffer->data, section_chain->buffer->data,
-           chunk_section_size);
+      // TODO: avoid copy
+      memcpy(current_chain->buffer->data, current_section->buffer->data,
+        current_section->buffer->size);
 
-    writer.current->next = current_chain;
-    writer.current = current_chain;
-    writer.last = current_chain;
+      current_chain->buffer->size = current_section->buffer->size;
+
+      writer.current->next = current_chain;
+      writer.current = current_chain;
+      writer.last = current_chain;
+      writer.relative_write_pos = current_chain->buffer->size;
+
+      current_section = current_section->next;
+    }
   }
+
+  pxe_pool_free(pool, section_chain, 1);
 
   for (size_t i = 0; i < 256; ++i) {
     if (pxe_buffer_write_u32(&writer, 0) == 0) {
@@ -418,8 +460,8 @@ bool32 pxe_game_send_chunk_data(pxe_session* session, pxe_pool* pool,
     return 0;
   }
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_CHUNK_DATA, writer.head);
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                        PXE_PROTOCOL_OUTBOUND_PLAY_CHUNK_DATA, writer.head, 1);
 
   return 1;
 }
@@ -430,8 +472,8 @@ bool32 pxe_game_send_brand(pxe_session* session, pxe_memory_arena* trans_arena,
       pool, "minecraft:brand", (const u8*)pxe_server_brand,
       pxe_array_string_size(pxe_server_brand));
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_PLUGIN_MESSAGE, buffer);
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                        PXE_PROTOCOL_OUTBOUND_PLAY_PLUGIN_MESSAGE, buffer, 1);
 
   return 1;
 }
@@ -444,8 +486,8 @@ bool32 pxe_game_change_game_state(pxe_session* session,
   pxe_buffer_chain* buffer = pxe_serialize_play_change_game_state(
       pool, PXE_CHANGE_GAME_STATE_REASON_GAMEMODE, (float)gamemode);
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_CHANGE_GAME_STATE, buffer);
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                        PXE_PROTOCOL_OUTBOUND_PLAY_CHANGE_GAME_STATE, buffer, 1);
 
   return 1;
 }
@@ -455,8 +497,8 @@ bool32 pxe_game_send_time(pxe_game_server* server, pxe_session* session,
   pxe_buffer_chain* buffer = pxe_serialize_play_time_update(
       pool, server->world_age, server->world_time);
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_TIME_UPDATE, buffer);
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                        PXE_PROTOCOL_OUTBOUND_PLAY_TIME_UPDATE, buffer, 1);
 
   return 1;
 }
@@ -470,9 +512,9 @@ bool32 pxe_game_send_position_and_look(pxe_session* session,
   pxe_buffer_chain* buffer = pxe_serialize_play_position_and_look(
       pool, x, y, z, yaw, pitch, 0, next_teleport_id++);
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
                         PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_POSITION_AND_LOOK,
-                        buffer);
+                        buffer, 1);
 
   return 1;
 }
@@ -482,8 +524,8 @@ bool32 pxe_game_send_keep_alive_packet(pxe_session* session,
                                        pxe_pool* pool, i64 id) {
   pxe_buffer_chain* buffer = pxe_serialize_play_keep_alive(pool, id);
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_KEEP_ALIVE, buffer);
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                        PXE_PROTOCOL_OUTBOUND_PLAY_KEEP_ALIVE, buffer, 1);
 
   return 1;
 }
@@ -495,8 +537,8 @@ bool32 pxe_game_send_player_abilities(pxe_session* session,
   pxe_buffer_chain* buffer =
       pxe_serialize_play_player_abilities(pool, flags, fly_speed, fov);
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_ABILITIES, buffer);
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                        PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_ABILITIES, buffer, 1);
 
   return 1;
 }
@@ -507,8 +549,8 @@ bool32 pxe_game_send_join_packet(pxe_session* session,
   pxe_buffer_chain* buffer = pxe_serialize_play_join_game(
       pool, session->entity_id, 0, 0, "default", 16, 0);
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_JOIN_GAME, buffer);
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                        PXE_PROTOCOL_OUTBOUND_PLAY_JOIN_GAME, buffer, 1);
 
   return 1;
 }
@@ -527,9 +569,11 @@ bool32 pxe_game_broadcast_spawn_player(pxe_game_server* server,
     if (target_session == session) continue;
     if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet_chain(&target_session->socket, trans_arena,
-                          PXE_PROTOCOL_OUTBOUND_PLAY_SPAWN_PLAYER, buffer);
+    pxe_send_packet_chain(&target_session->socket, trans_arena, pool,
+                          PXE_PROTOCOL_OUTBOUND_PLAY_SPAWN_PLAYER, buffer, 0);
   }
+
+  pxe_pool_free(pool, buffer, 1);
 
   return 1;
 }
@@ -568,12 +612,15 @@ bool32 pxe_game_broadcast_player_move(pxe_game_server* server,
     if (target_session == session) continue;
     if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet_chain(&target_session->socket, trans_arena, pkt_id, buffer);
+    pxe_send_packet_chain(&target_session->socket, trans_arena, pool, pkt_id, buffer, 0);
 
-    pxe_send_packet_chain(&target_session->socket, trans_arena,
+    pxe_send_packet_chain(&target_session->socket, trans_arena, pool,
                           PXE_PROTOCOL_OUTBOUND_PLAY_ENTITY_HEAD_LOOK,
-                          look_buffer);
+                          look_buffer, 0);
   }
+
+  pxe_pool_free(pool, buffer, 1);
+  pxe_pool_free(pool, look_buffer, 1);
 
   return 1;
 }
@@ -592,8 +639,8 @@ bool32 pxe_game_broadcast_existing_players(pxe_game_server* server,
         pool, target_session->entity_id, &target_session->uuid,
         target_session->x, target_session->y, target_session->z, 0.0f, 0.0f);
 
-    pxe_send_packet_chain(&session->socket, trans_arena,
-                          PXE_PROTOCOL_OUTBOUND_PLAY_SPAWN_PLAYER, buffer);
+    pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                          PXE_PROTOCOL_OUTBOUND_PLAY_SPAWN_PLAYER, buffer, 1);
   }
 
   return 1;
@@ -630,9 +677,11 @@ bool32 pxe_game_send_existing_player_info(pxe_game_server* server,
 
     if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet_chain(&target_session->socket, trans_arena,
-                          PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_INFO, buffer);
+    pxe_send_packet_chain(&target_session->socket, trans_arena, pool,
+                          PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_INFO, buffer, 0);
   }
+
+  pxe_pool_free(pool, buffer, 1);
 
   return 1;
 }
@@ -649,9 +698,11 @@ bool32 pxe_game_broadcast_destroy_entity(pxe_game_server* server,
     if (target_session->entity_id == eid) continue;
     if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet_chain(&target_session->socket, trans_arena,
-                          PXE_PROTOCOL_OUTBOUND_PLAY_DESTROY_ENTITIES, buffer);
+    pxe_send_packet_chain(&target_session->socket, trans_arena, pool,
+                          PXE_PROTOCOL_OUTBOUND_PLAY_DESTROY_ENTITIES, buffer, 0);
   }
+
+  pxe_pool_free(pool, buffer, 1);
 
   return 1;
 }
@@ -678,9 +729,11 @@ bool32 pxe_game_broadcast_player_info(pxe_game_server* server,
     if (target_session == session) continue;
     if (target_session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet_chain(&target_session->socket, trans_arena,
-                          PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_INFO, buffer);
+    pxe_send_packet_chain(&target_session->socket, trans_arena, pool,
+                          PXE_PROTOCOL_OUTBOUND_PLAY_PLAYER_INFO, buffer, 0);
   }
+
+  pxe_pool_free(pool, buffer, 1);
 
   return 1;
 }
@@ -697,9 +750,11 @@ bool32 pxe_game_server_send_chat(pxe_game_server* server,
 
     if (session->protocol_state != PXE_PROTOCOL_STATE_PLAY) continue;
 
-    pxe_send_packet_chain(&session->socket, trans_arena,
-                          PXE_PROTOCOL_OUTBOUND_PLAY_CHAT, buffer);
+    pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                          PXE_PROTOCOL_OUTBOUND_PLAY_CHAT, buffer, 0);
   }
+
+  pxe_pool_free(pool, buffer, 1);
 
   return 1;
 }
@@ -709,8 +764,8 @@ bool32 pxe_game_send_health(pxe_session* session, pxe_memory_arena* trans_arena,
   pxe_buffer_chain* buffer =
       pxe_serialize_play_update_health(pool, session->health, 20, 5.0f);
 
-  pxe_send_packet_chain(&session->socket, trans_arena,
-                        PXE_PROTOCOL_OUTBOUND_PLAY_UPDATE_HEALTH, buffer);
+  pxe_send_packet_chain(&session->socket, trans_arena, pool,
+                        PXE_PROTOCOL_OUTBOUND_PLAY_UPDATE_HEALTH, buffer, 1);
 
   return 1;
 }
@@ -804,9 +859,9 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
         pxe_buffer_write_length_string(&writer, pxe_ping_response, data_size);
 
-        pxe_send_packet_chain(&session->socket, trans_arena,
+        pxe_send_packet_chain(&session->socket, trans_arena, game_server->write_pool,
                               PXE_PROTOCOL_OUTBOUND_STATUS_RESPONSE,
-                              writer.head);
+                              writer.head, 1);
       } break;
       case PXE_PROTOCOL_INBOUND_STATUS_PING: {
         // Respond to the game with the same payload.
@@ -869,8 +924,8 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
         pxe_buffer_write_length_string(&writer, session->username,
                                        username_len);
 
-        pxe_send_packet_chain(&session->socket, trans_arena,
-                              PXE_PROTOCOL_OUTBOUND_LOGIN_SUCCESS, writer.head);
+        pxe_send_packet_chain(&session->socket, trans_arena, game_server->write_pool,
+                              PXE_PROTOCOL_OUTBOUND_LOGIN_SUCCESS, writer.head, 1);
 
         session->entity_id = game_server->next_entity_id++;
 
@@ -1032,8 +1087,8 @@ pxe_process_result pxe_game_process_session(pxe_game_server* game_server,
 
             pxe_buffer_chain* buffer = pxe_serialize_play_respawn(
               game_server->write_pool, 0, PXE_GAMEMODE_SURVIVAL, "default");
-            pxe_send_packet_chain(&session->socket, trans_arena,
-                            PXE_PROTOCOL_OUTBOUND_PLAY_RESPAWN, buffer);
+            pxe_send_packet_chain(&session->socket, trans_arena, game_server->write_pool,
+                            PXE_PROTOCOL_OUTBOUND_PLAY_RESPAWN, buffer, 1);
           }
 
           session->x = 0;

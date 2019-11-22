@@ -4,6 +4,7 @@
 #include "pxe_buffer.h"
 
 #include <stdio.h>
+#include <string.h>
 
 void pxe_nbt_tag_compound_add(pxe_nbt_tag_compound* compound, pxe_nbt_tag tag) {
   pxe_nbt_tag* new_tag = compound->tags + compound->ntags++;
@@ -15,8 +16,7 @@ void pxe_nbt_tag_compound_add(pxe_nbt_tag_compound* compound, pxe_nbt_tag tag) {
 
 bool32 pxe_nbt_parse_tag(pxe_buffer_reader* reader, pxe_nbt_tag* tag,
                          pxe_memory_arena* arena);
-bool32 pxe_nbt_write_named_tag(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
-                               pxe_memory_arena* arena);
+bool32 pxe_nbt_write_named_tag(pxe_buffer_writer* writer, pxe_nbt_tag* tag);
 
 bool32 pxe_nbt_read_length_string(pxe_buffer_reader* reader, char** data,
                                   size_t* size, pxe_memory_arena* arena) {
@@ -140,8 +140,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_reader* reader, pxe_nbt_tag* tag,
       byte_array_tag->length = 0;
       byte_array_tag->data = NULL;
 
-      if (pxe_buffer_read_u32(reader, (u32*)&byte_array_tag->length) ==
-          0) {
+      if (pxe_buffer_read_u32(reader, (u32*)&byte_array_tag->length) == 0) {
         return 0;
       }
 
@@ -150,7 +149,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_reader* reader, pxe_nbt_tag* tag,
 
       // Read all of the contained bytes in one read.
       if (pxe_buffer_read_raw_string(reader, (char*)&byte_array_tag->data,
-                                           byte_array_tag->length) == 0) {
+                                     byte_array_tag->length) == 0) {
         return 0;
       }
 
@@ -226,8 +225,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_reader* reader, pxe_nbt_tag* tag,
       int_array_tag->length = 0;
       int_array_tag->data = NULL;
 
-      if (pxe_buffer_read_u32(reader, (u32*)&int_array_tag->length) ==
-          0) {
+      if (pxe_buffer_read_u32(reader, (u32*)&int_array_tag->length) == 0) {
         return 0;
       }
 
@@ -251,8 +249,7 @@ bool32 pxe_nbt_parse_tag(pxe_buffer_reader* reader, pxe_nbt_tag* tag,
       long_array_tag->length = 0;
       long_array_tag->data = NULL;
 
-      if (pxe_buffer_read_u32(reader, (u32*)&long_array_tag->length) ==
-          0) {
+      if (pxe_buffer_read_u32(reader, (u32*)&long_array_tag->length) == 0) {
         return 0;
       }
 
@@ -316,24 +313,16 @@ bool32 pxe_nbt_parse(char* data, size_t size, pxe_memory_arena* arena,
 /////////////////////////// NBT writing
 
 bool32 pxe_nbt_write_length_string(pxe_buffer_writer* writer, char* data,
-                                   size_t size, pxe_memory_arena* arena) {
-  pxe_arena_alloc_unaligned(arena, size + sizeof(u16));
-
-  writer->current->buffer->size += sizeof(u16) + size;
-
+                                   size_t size) {
   if (pxe_buffer_write_u16(writer, (u16)size) == 0) return 0;
 
   return pxe_buffer_write_raw_string(writer, data, size);
 }
 
-bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
-                              pxe_memory_arena* arena) {
+bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag) {
   switch (tag->type) {
     case PXE_NBT_TAG_TYPE_BYTE: {
       pxe_nbt_tag_byte* byte_tag = tag->tag;
-
-      writer->current->buffer->size += sizeof(u8);
-      pxe_arena_alloc_unaligned(arena, sizeof(u8));
 
       if (pxe_buffer_write_u8(writer, byte_tag->data) == 0) {
         return 0;
@@ -342,18 +331,12 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_SHORT: {
       pxe_nbt_tag_short* short_tag = tag->tag;
 
-      writer->current->buffer->size += sizeof(u16);
-      pxe_arena_alloc_unaligned(arena, sizeof(u16));
-
       if (pxe_buffer_write_u16(writer, short_tag->data) == 0) {
         return 0;
       }
     } break;
     case PXE_NBT_TAG_TYPE_INT: {
       pxe_nbt_tag_int* int_tag = tag->tag;
-
-      writer->current->buffer->size += sizeof(u32);
-      pxe_arena_alloc_unaligned(arena, sizeof(u32));
 
       if (pxe_buffer_write_u32(writer, int_tag->data) == 0) {
         return 0;
@@ -362,9 +345,6 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_LONG: {
       pxe_nbt_tag_long* long_tag = tag->tag;
 
-      writer->current->buffer->size += sizeof(u64);
-      pxe_arena_alloc_unaligned(arena, sizeof(u64));
-
       if (pxe_buffer_write_u64(writer, long_tag->data) == 0) {
         return 0;
       }
@@ -372,18 +352,12 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
     case PXE_NBT_TAG_TYPE_FLOAT: {
       pxe_nbt_tag_float* float_tag = tag->tag;
 
-      writer->current->buffer->size += sizeof(float);
-      pxe_arena_alloc_unaligned(arena, sizeof(float));
-
       if (pxe_buffer_write_float(writer, float_tag->data) == 0) {
         return 0;
       }
     } break;
     case PXE_NBT_TAG_TYPE_DOUBLE: {
       pxe_nbt_tag_double* double_tag = tag->tag;
-
-      writer->current->buffer->size += sizeof(double);
-      pxe_arena_alloc_unaligned(arena, sizeof(double));
 
       if (pxe_buffer_write_double(writer, double_tag->data) == 0) {
         return 0;
@@ -393,9 +367,6 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
       pxe_nbt_tag_byte_array* byte_array_tag = tag->tag;
 
       size_t data_size = sizeof(u32) + byte_array_tag->length;
-
-      writer->current->buffer->size += data_size;
-      pxe_arena_alloc_unaligned(arena, data_size);
 
       if (pxe_buffer_write_u32(writer, (u32)byte_array_tag->length) == 0) {
         return 0;
@@ -410,15 +381,12 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
       pxe_nbt_tag_string* string_tag = tag->tag;
 
       if (pxe_nbt_write_length_string(writer, string_tag->data,
-                                      string_tag->length, arena) == 0) {
+                                      string_tag->length) == 0) {
         return 0;
       }
     } break;
     case PXE_NBT_TAG_TYPE_LIST: {
       pxe_nbt_tag_list* list_tag = tag->tag;
-
-      writer->current->buffer->size += 1;
-      pxe_arena_alloc_unaligned(arena, 1);
 
       if (list_tag->length == 0) {
         list_tag->type = PXE_NBT_TAG_TYPE_END;
@@ -427,9 +395,6 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
       if (pxe_buffer_write_u8(writer, (u8)list_tag->type) == 0) {
         return 0;
       }
-
-      writer->current->buffer->size += sizeof(u32);
-      pxe_arena_alloc_unaligned(arena, sizeof(u32));
 
       if (pxe_buffer_write_u32(writer, (u32)list_tag->length) == 0) {
         return 0;
@@ -440,7 +405,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
 
         // TODO: This probably shouldn't be called recursively otherwise bad
         // actors could blow out the stack with nested lists.
-        if (pxe_nbt_write_tag_data(writer, tag_entry, arena) == 0) {
+        if (pxe_nbt_write_tag_data(writer, tag_entry) == 0) {
           return 0;
         }
       }
@@ -453,7 +418,7 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
 
         // TODO: This probably shouldn't be called recursively otherwise bad
         // actors could blow out the stack with nested lists.
-        if (pxe_nbt_write_named_tag(writer, tag_entry, arena) == 0) {
+        if (pxe_nbt_write_named_tag(writer, tag_entry) == 0) {
           return 0;
         }
       }
@@ -462,9 +427,6 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
       pxe_nbt_tag_int_array* int_array_tag = tag->tag;
 
       size_t data_size = sizeof(u32) + int_array_tag->length * sizeof(u32);
-
-      writer->current->buffer->size += data_size;
-      pxe_arena_alloc_unaligned(arena, data_size);
 
       if (pxe_buffer_write_u32(writer, (u32)int_array_tag->length) == 0) {
         return 0;
@@ -482,9 +444,6 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
       pxe_nbt_tag_long_array* long_array_tag = tag->tag;
 
       size_t data_size = sizeof(u32) + long_array_tag->length * sizeof(u64);
-
-      writer->current->buffer->size += data_size;
-      pxe_arena_alloc_unaligned(arena, data_size);
 
       if (pxe_buffer_write_u32(writer, (u32)long_array_tag->length) == 0) {
         return 0;
@@ -506,70 +465,64 @@ bool32 pxe_nbt_write_tag_data(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
   return 1;
 }
 
-bool32 pxe_nbt_write_named_tag(pxe_buffer_writer* writer, pxe_nbt_tag* tag,
-                               pxe_memory_arena* arena) {
-  pxe_arena_alloc_unaligned(arena, 1);
-  ++writer->current->buffer->size;
-
+bool32 pxe_nbt_write_named_tag(pxe_buffer_writer* writer, pxe_nbt_tag* tag) {
   if (pxe_buffer_write_u8(writer, (u8)tag->type) == 0) {
     return 0;
   }
 
-  if (pxe_nbt_write_length_string(writer, tag->name, tag->name_length, arena) ==
-      0) {
+  if (pxe_nbt_write_length_string(writer, tag->name, tag->name_length) == 0) {
     return 0;
   }
 
-  if (pxe_nbt_write_tag_data(writer, tag, arena) == 0) {
+  if (pxe_nbt_write_tag_data(writer, tag) == 0) {
     return 0;
   }
 
   return 1;
 }
 
-// This function will break if memory arenas are ever updated to be
-// multithreaded because it relies on the arena allocating contiguously.
 bool32 pxe_nbt_write(pxe_nbt_tag_compound* compound, pxe_memory_arena* arena,
                      char** out, size_t* size) {
-  // Beginning allocation should be aligned so the resulting pointer is aligned.
-  *out = pxe_arena_alloc(arena, 1);
-
-  pxe_buffer_writer writer = {0};
-  pxe_buffer_chain current;
-  pxe_buffer buffer;
-
-  buffer.data = (u8*)*out;
-  buffer.size = 1;
-
-  current.next = NULL;
-  current.buffer = &buffer;
-
-  writer.current = &current;
+  pxe_pool* pool = pxe_pool_create(arena, 512);
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
   if (pxe_buffer_write_u8(&writer, (u8)PXE_NBT_TAG_TYPE_COMPOUND) == 0) {
     return 0;
   }
 
   if (pxe_nbt_write_length_string(&writer, compound->name,
-                                  compound->name_length, arena) == 0) {
+                                  compound->name_length) == 0) {
     return 0;
   }
 
   for (size_t i = 0; i < compound->ntags; ++i) {
     pxe_nbt_tag* tag = compound->tags + i;
 
-    if (pxe_nbt_write_named_tag(&writer, tag, arena) == 0) {
+    if (pxe_nbt_write_named_tag(&writer, tag) == 0) {
       return 0;
     }
   }
 
-  pxe_arena_alloc_unaligned(arena, 1);
-  ++buffer.size;
   if (pxe_buffer_write_u8(&writer, (u8)PXE_NBT_TAG_TYPE_END) == 0) {
     return 0;
   }
 
-  *size = buffer.size;
+  *size = pxe_buffer_size(writer.head);
+
+#if 0
+  *out = pxe_arena_alloc(arena, *size);
+
+  pxe_buffer_chain* current = writer.head;
+  size_t pos = 0;
+  while (current) {
+    memcpy(*out + pos, current->buffer->data, current->buffer->size);
+    pos += current->buffer->size;
+    current = current->next;
+  }
+#else
+  // This should work with temp arenas only
+  *out = (char*)writer.head->buffer->data;
+#endif
 
   return 1;
 }

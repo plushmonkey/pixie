@@ -31,18 +31,18 @@ int main(int argc, char* argv[]) {
   }
 #endif
 
-  size_t trans_size = pxe_megabytes(32);
+  size_t trans_size = pxe_megabytes(16);
   void* trans_memory = calloc(1, trans_size);
   pxe_memory_arena trans_arena;
 
-  size_t perm_size = pxe_megabytes(32);
+  size_t perm_size = pxe_megabytes(2);
   void* perm_memory = calloc(1, perm_size);
   pxe_memory_arena perm_arena;
 
   pxe_arena_initialize(&trans_arena, trans_memory, trans_size);
   pxe_arena_initialize(&perm_arena, perm_memory, perm_size);
 
-  //pxe_game_server_run(&perm_arena, &trans_arena);
+  pxe_game_server_run(&perm_arena, &trans_arena);
 
   return 0;
 }

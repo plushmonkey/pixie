@@ -60,7 +60,8 @@ struct pxe_buffer_chain* pxe_pool_alloc(pxe_pool* pool) {
     u8* data = pxe_arena_alloc(pool->arena, pool->element_size);
 
     buffer->data = data;
-    buffer->size = pool->element_size;
+    buffer->size = 0;
+    buffer->max_size = pool->element_size;
 
     chain->buffer = buffer;
     chain->next = NULL;
@@ -74,6 +75,8 @@ struct pxe_buffer_chain* pxe_pool_alloc(pxe_pool* pool) {
 
   pool->free = free->next;
   free->next = NULL;
+
+  free->buffer->size = 0;
 
   return free;
 }

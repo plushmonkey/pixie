@@ -10,6 +10,7 @@ struct pxe_memory_arena;
 typedef struct pxe_buffer {
   u8* data;
   size_t size;
+  size_t max_size;
 } pxe_buffer;
 
 typedef struct pxe_buffer_chain {

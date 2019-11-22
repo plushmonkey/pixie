@@ -15,6 +15,8 @@ inline bool32 pxe_buffer_writer_alloc(pxe_buffer_writer* writer) {
     return 0;
   }
 
+  new_chain->next = NULL;
+
   if (writer->head == NULL) {
     writer->head = new_chain;
     writer->current = new_chain;
@@ -27,6 +29,20 @@ inline bool32 pxe_buffer_writer_alloc(pxe_buffer_writer* writer) {
   return 1;
 }
 
+inline size_t pxe_buffer_allocated_size(pxe_buffer_chain* chain) {
+  if (chain == NULL) return 0;
+
+  size_t size = 0;
+
+  do {
+    size += chain->buffer->max_size;
+
+    chain = chain->next;
+  } while (chain);
+
+  return size;
+}
+
 // Reserves space in the buffer writer by allocating if the size would go over
 // the currently allocated space.
 inline bool32 pxe_buffer_writer_reserve(pxe_buffer_writer* writer,
@@ -34,8 +50,9 @@ inline bool32 pxe_buffer_writer_reserve(pxe_buffer_writer* writer,
 #if 0
   if (writer->head == NULL || (writer->relative_write_pos + size > writer->pool->element_size)) {
 #else
-  while (writer->head == NULL ||
-         pxe_buffer_size(writer->current) - writer->relative_write_pos < size) {
+  while (writer->head == NULL || pxe_buffer_allocated_size(writer->current) -
+                                         writer->relative_write_pos <
+                                     size) {
 #endif
   if (!pxe_buffer_writer_alloc(writer)) {
     return 0;
@@ -53,21 +70,6 @@ inline size_t pxe_buffer_writer_remaining(pxe_buffer_writer* writer) {
 inline bool32 pxe_buffer_writer_available(pxe_buffer_writer* writer,
                                           size_t size) {
   return pxe_buffer_writer_remaining(writer) >= size;
-}
-
-pxe_buffer_chain* pxe_chain_insert(pxe_memory_arena* arena,
-                                   pxe_buffer_chain* chain, u8* data,
-                                   size_t size) {
-  pxe_buffer* buffer = pxe_arena_push_type(arena, pxe_buffer);
-  pxe_buffer_chain* new_chain = pxe_arena_push_type(arena, pxe_buffer_chain);
-
-  buffer->data = data;
-  buffer->size = size;
-
-  new_chain->buffer = buffer;
-  new_chain->next = chain;
-
-  return new_chain;
 }
 
 size_t pxe_buffer_size(pxe_buffer_chain* chain) {
@@ -532,6 +534,7 @@ bool32 pxe_buffer_write_u8(pxe_buffer_writer* writer, u8 data) {
   pxe_buffer* buffer = writer->current->buffer;
 
   buffer->data[writer->relative_write_pos++] = data;
+  buffer->size++;
 
   return 1;
 }
@@ -549,6 +552,7 @@ bool32 pxe_buffer_write_u16(pxe_buffer_writer* writer, u16 data) {
     *(u16*)(buffer->data + writer->relative_write_pos) = data;
 
     writer->relative_write_pos += size;
+    buffer->size += size;
   } else {
     size_t first_len = pxe_buffer_writer_remaining(writer);
     size_t second_len = size - first_len;
@@ -558,6 +562,8 @@ bool32 pxe_buffer_write_u16(pxe_buffer_writer* writer, u16 data) {
           ((u8*)&data)[i];
     }
 
+    writer->current->buffer->size += first_len;
+
     writer->current = writer->current->next;
     writer->relative_write_pos = 0;
 
@@ -565,6 +571,8 @@ bool32 pxe_buffer_write_u16(pxe_buffer_writer* writer, u16 data) {
       writer->current->buffer->data[writer->relative_write_pos++] =
           ((u8*)&data)[i + first_len];
     }
+
+    writer->current->buffer->size += second_len;
   }
 
   return 1;
@@ -583,6 +591,7 @@ bool32 pxe_buffer_write_u32(pxe_buffer_writer* writer, u32 data) {
     *(u32*)(buffer->data + writer->relative_write_pos) = data;
 
     writer->relative_write_pos += size;
+    buffer->size += size;
   } else {
     size_t first_len = pxe_buffer_writer_remaining(writer);
     size_t second_len = size - first_len;
@@ -592,6 +601,7 @@ bool32 pxe_buffer_write_u32(pxe_buffer_writer* writer, u32 data) {
           ((u8*)&data)[i];
     }
 
+    writer->current->buffer->size += first_len;
     writer->current = writer->current->next;
     writer->relative_write_pos = 0;
 
@@ -599,6 +609,8 @@ bool32 pxe_buffer_write_u32(pxe_buffer_writer* writer, u32 data) {
       writer->current->buffer->data[writer->relative_write_pos++] =
           ((u8*)&data)[i + first_len];
     }
+
+    writer->current->buffer->size += second_len;
   }
 
   return 1;
@@ -617,6 +629,7 @@ bool32 pxe_buffer_write_u64(pxe_buffer_writer* writer, u64 data) {
     *(u64*)(buffer->data + writer->relative_write_pos) = data;
 
     writer->relative_write_pos += size;
+    buffer->size += size;
   } else {
     size_t first_len = pxe_buffer_writer_remaining(writer);
     size_t second_len = size - first_len;
@@ -626,6 +639,7 @@ bool32 pxe_buffer_write_u64(pxe_buffer_writer* writer, u64 data) {
           ((u8*)&data)[i];
     }
 
+    writer->current->buffer->size += first_len;
     writer->current = writer->current->next;
     writer->relative_write_pos = 0;
 
@@ -633,6 +647,8 @@ bool32 pxe_buffer_write_u64(pxe_buffer_writer* writer, u64 data) {
       writer->current->buffer->data[writer->relative_write_pos++] =
           ((u8*)&data)[i + first_len];
     }
+
+    writer->current->buffer->size += second_len;
   }
 
   return 1;
@@ -653,6 +669,7 @@ bool32 pxe_buffer_write_float(pxe_buffer_writer* writer, float data) {
     *(float*)(buffer->data + writer->relative_write_pos) = data;
 
     writer->relative_write_pos += size;
+    buffer->size += size;
   } else {
     size_t first_len = pxe_buffer_writer_remaining(writer);
     size_t second_len = size - first_len;
@@ -662,6 +679,7 @@ bool32 pxe_buffer_write_float(pxe_buffer_writer* writer, float data) {
           ((u8*)&data)[i];
     }
 
+    writer->current->buffer->size += first_len;
     writer->current = writer->current->next;
     writer->relative_write_pos = 0;
 
@@ -669,6 +687,8 @@ bool32 pxe_buffer_write_float(pxe_buffer_writer* writer, float data) {
       writer->current->buffer->data[writer->relative_write_pos++] =
           ((u8*)&data)[i + first_len];
     }
+
+    writer->current->buffer->size += second_len;
   }
 
   return 1;
@@ -689,6 +709,7 @@ bool32 pxe_buffer_write_double(pxe_buffer_writer* writer, double data) {
     *(double*)(buffer->data + writer->relative_write_pos) = data;
 
     writer->relative_write_pos += size;
+    buffer->size += size;
   } else {
     size_t first_len = pxe_buffer_writer_remaining(writer);
     size_t second_len = size - first_len;
@@ -698,6 +719,7 @@ bool32 pxe_buffer_write_double(pxe_buffer_writer* writer, double data) {
           ((u8*)&data)[i];
     }
 
+    writer->current->buffer->size += first_len;
     writer->current = writer->current->next;
     writer->relative_write_pos = 0;
 
@@ -705,6 +727,8 @@ bool32 pxe_buffer_write_double(pxe_buffer_writer* writer, double data) {
       writer->current->buffer->data[writer->relative_write_pos++] =
           ((u8*)&data)[i + first_len];
     }
+
+    writer->current->buffer->size += second_len;
   }
 
   return 1;
@@ -725,15 +749,12 @@ bool32 pxe_buffer_write_raw_string(pxe_buffer_writer* writer, const char* data,
 
   for (size_t i = 0; i < length; ++i) {
     if (!pxe_buffer_writer_available(writer, 1)) {
-      if (!pxe_buffer_writer_alloc(writer)) {
-        return 0;
-      }
-
       writer->current = writer->current->next;
       writer->relative_write_pos = 0;
     }
 
     writer->current->buffer->data[writer->relative_write_pos++] = data[i];
+    ++writer->current->buffer->size;
   }
 
   return 1;
@@ -763,6 +784,7 @@ pxe_buffer_writer pxe_buffer_writer_create(pxe_pool* pool) {
   writer.pool = pool;
   writer.current = NULL;
   writer.head = NULL;
+  writer.last = NULL;
   writer.relative_write_pos = 0;
 
   return writer;
