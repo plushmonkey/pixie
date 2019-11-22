@@ -7,18 +7,17 @@
 #include <stdio.h>
 #include <string.h>
 
-struct pxe_buffer* pxe_serialize_play_chat(struct pxe_memory_arena* arena,
-                                           char* message, size_t message_size,
-                                           char* color) {
+struct pxe_buffer_chain* pxe_serialize_play_chat(struct pxe_pool* pool,
+                                                 char* message,
+                                                 size_t message_size,
+                                                 char* color) {
   char data[512];
   u8 position = 0;
 
   size_t data_len =
       sprintf_s(data, pxe_array_size(data),
                 "{\"text\":\"%s\", \"color\": \"%s\"}", message, color);
-
-  size_t size = data_len + pxe_varint_size((i32)data_len) + sizeof(u8);
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, size);
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
   if (pxe_buffer_write_length_string(&writer, data, data_len) == 0) {
     return NULL;
@@ -28,125 +27,117 @@ struct pxe_buffer* pxe_serialize_play_chat(struct pxe_memory_arena* arena,
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_animation(struct pxe_memory_arena* arena,
-                                                i32 eid,
-                                                pxe_animation_type animation) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_animation(
+    struct pxe_pool* pool, i32 eid, pxe_animation_type animation) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  if (pxe_buffer_push_varint(&writer, eid, arena) == 0) {
+  if (pxe_buffer_write_varint(&writer, eid) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_u8(&writer, (u8)animation, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, (u8)animation) == 0) {
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_spawn_player(
-    struct pxe_memory_arena* arena, i32 eid, pxe_uuid* uuid, double x, double y,
+struct pxe_buffer_chain* pxe_serialize_play_spawn_player(
+    struct pxe_pool* pool, i32 eid, pxe_uuid* uuid, double x, double y,
     double z, float yaw, float pitch) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  if (pxe_buffer_push_varint(&writer, eid, arena) == 0) {
+  if (pxe_buffer_write_varint(&writer, eid) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_uuid(&writer, uuid, arena) == 0) {
+  if (pxe_buffer_write_uuid(&writer, uuid) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_double(&writer, x, arena) == 0) {
+  if (pxe_buffer_write_double(&writer, x) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_double(&writer, y, arena) == 0) {
+  if (pxe_buffer_write_double(&writer, y) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_double(&writer, z, arena) == 0) {
+  if (pxe_buffer_write_double(&writer, z) == 0) {
     return NULL;
   }
 
   u8 yaw_data = (u8)((yaw / 360.0f) * 256);
   u8 pitch_data = (u8)((pitch / 360.0f) * 256);
 
-  if (pxe_buffer_push_u8(&writer, yaw_data, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, yaw_data) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_u8(&writer, pitch_data, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, pitch_data) == 0) {
     return NULL;
   }
 
   // TODO: Serialize metadata here when implemented
-  if (pxe_buffer_push_u8(&writer, 0xFF, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, 0xFF) == 0) {
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_plugin_message(
-    struct pxe_memory_arena* arena, const char* channel, const u8* data,
-    size_t size) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_plugin_message(
+    struct pxe_pool* pool, const char* channel, const u8* data, size_t size) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  pxe_buffer_push_length_string(&writer, channel, strlen(channel), arena);
-  pxe_buffer_push_length_string(&writer, (char*)data, size, arena);
+  pxe_buffer_write_length_string(&writer, channel, strlen(channel));
+  pxe_buffer_write_length_string(&writer, (char*)data, size);
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_entity_status(
-  struct pxe_memory_arena* arena, pxe_entity_id eid, u8 status) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_entity_status(struct pxe_pool* pool,
+                                                          pxe_entity_id eid,
+                                                          u8 status) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  pxe_buffer_push_u32(&writer, eid, arena);
-  pxe_buffer_push_u8(&writer, status, arena);
+  pxe_buffer_write_u32(&writer, eid);
+  pxe_buffer_write_u8(&writer, status);
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_change_game_state(
-    struct pxe_memory_arena* arena, pxe_change_game_state_reason reason,
-    float value) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_change_game_state(
+    struct pxe_pool* pool, pxe_change_game_state_reason reason, float value) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  pxe_buffer_push_u8(&writer, (u8)reason, arena);
-  pxe_buffer_push_float(&writer, value, arena);
+  pxe_buffer_write_u8(&writer, (u8)reason);
+  pxe_buffer_write_float(&writer, value);
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_keep_alive(struct pxe_memory_arena* arena,
-                                                 i64 id) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, sizeof(u64));
+struct pxe_buffer_chain* pxe_serialize_play_keep_alive(struct pxe_pool* pool,
+                                                       i64 id) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
   if (pxe_buffer_write_u64(&writer, (u64)id) == 0) {
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_join_game(struct pxe_memory_arena* arena,
-                                                i32 eid, u8 gamemode,
-                                                i32 dimension, char* level_type,
-                                                i32 view_distance,
-                                                bool32 reduced_debug) {
+struct pxe_buffer_chain* pxe_serialize_play_join_game(
+    struct pxe_pool* pool, i32 eid, u8 gamemode, i32 dimension,
+    char* level_type, i32 view_distance, bool32 reduced_debug) {
   u8 max_players = 0xFF;
   size_t level_len = (i32)strlen(level_type);
 
-  size_t size = sizeof(eid) + sizeof(gamemode) + sizeof(dimension) +
-                sizeof(max_players) + pxe_varint_size((i32)level_len) +
-                level_len + pxe_varint_size(view_distance) + 1;
-
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, size);
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
   if (!pxe_buffer_write_u32(&writer, eid)) {
     return NULL;
@@ -176,15 +167,15 @@ struct pxe_buffer* pxe_serialize_play_join_game(struct pxe_memory_arena* arena,
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_entity_look_and_relative_move(
-    struct pxe_memory_arena* arena, pxe_entity_id eid, double delta_x,
-    double delta_y, double delta_z, float yaw, float pitch, bool32 on_ground) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_entity_look_and_relative_move(
+    struct pxe_pool* pool, pxe_entity_id eid, double delta_x, double delta_y,
+    double delta_z, float yaw, float pitch, bool32 on_ground) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  if (!pxe_buffer_push_varint(&writer, eid, arena)) {
+  if (!pxe_buffer_write_varint(&writer, eid)) {
     return NULL;
   }
 
@@ -192,41 +183,39 @@ struct pxe_buffer* pxe_serialize_play_entity_look_and_relative_move(
   i16 encoded_y = (i16)((delta_y * 32) * 128);
   i16 encoded_z = (i16)((delta_z * 32) * 128);
 
-  if (!pxe_buffer_push_u16(&writer, (u16)encoded_x, arena)) {
+  if (!pxe_buffer_write_u16(&writer, (u16)encoded_x)) {
     return NULL;
   }
 
-  if (!pxe_buffer_push_u16(&writer, (u16)encoded_y, arena)) {
+  if (!pxe_buffer_write_u16(&writer, (u16)encoded_y)) {
     return NULL;
   }
 
-  if (!pxe_buffer_push_u16(&writer, (u16)encoded_z, arena)) {
+  if (!pxe_buffer_write_u16(&writer, (u16)encoded_z)) {
     return NULL;
   }
 
   u8 yaw_data = (u8)((yaw / 360.0f) * 256);
   u8 pitch_data = (u8)((pitch / 360.0f) * 256);
 
-  if (pxe_buffer_push_u8(&writer, yaw_data, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, yaw_data) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_u8(&writer, pitch_data, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, pitch_data) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_u8(&writer, (u8)on_ground, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, (u8)on_ground) == 0) {
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_player_abilities(
-    struct pxe_memory_arena* arena, u8 flags, float fly_speed, float fov) {
-  size_t size = sizeof(u8) + sizeof(float) + sizeof(float);
-
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, size);
+struct pxe_buffer_chain* pxe_serialize_play_player_abilities(
+    struct pxe_pool* pool, u8 flags, float fly_speed, float fov) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
   if (!pxe_buffer_write_u8(&writer, flags)) {
     return NULL;
@@ -240,26 +229,26 @@ struct pxe_buffer* pxe_serialize_play_player_abilities(
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_player_info(
-    struct pxe_memory_arena* arena, pxe_player_info_action action,
+struct pxe_buffer_chain* pxe_serialize_play_player_info(
+    struct pxe_pool* pool, pxe_player_info_action action,
     pxe_player_info* infos, size_t info_count) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  if (pxe_buffer_push_varint(&writer, (i32)action, arena) == 0) {
+  if (pxe_buffer_write_varint(&writer, (i32)action) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_varint(&writer, (i32)info_count, arena) == 0) {
+  if (pxe_buffer_write_varint(&writer, (i32)info_count) == 0) {
     return NULL;
   }
 
   for (size_t i = 0; i < info_count; ++i) {
     pxe_player_info* info = infos + i;
 
-    if (pxe_buffer_push_uuid(&writer, &info->uuid, arena) == 0) {
+    if (pxe_buffer_write_uuid(&writer, &info->uuid) == 0) {
       return NULL;
     }
 
@@ -267,13 +256,13 @@ struct pxe_buffer* pxe_serialize_play_player_info(
       case PXE_PLAYER_INFO_ADD: {
         size_t name_len = strlen(info->add.name);
 
-        if (pxe_buffer_push_length_string(&writer, info->add.name, name_len,
-                                          arena) == 0) {
+        if (pxe_buffer_write_length_string(&writer, info->add.name, name_len) ==
+            0) {
           return NULL;
         }
 
-        if (pxe_buffer_push_varint(&writer, (i32)info->add.property_count,
-                                   arena) == 0) {
+        if (pxe_buffer_write_varint(&writer, (i32)info->add.property_count) ==
+            0) {
           return NULL;
         }
 
@@ -282,49 +271,46 @@ struct pxe_buffer* pxe_serialize_play_player_info(
           pxe_player_info_add_property* property =
               info->add.properties + property_index;
 
-          if (pxe_buffer_push_length_string(&writer, property->name,
-                                            property->name_len, arena) == 0) {
+          if (pxe_buffer_write_length_string(&writer, property->name,
+                                             property->name_len) == 0) {
             return NULL;
           }
 
-          if (pxe_buffer_push_length_string(&writer, property->value,
-                                            property->value_len, arena) == 0) {
+          if (pxe_buffer_write_length_string(&writer, property->value,
+                                             property->value_len) == 0) {
             return NULL;
           }
 
-          if (pxe_buffer_push_u8(&writer, (u8)property->is_signed, arena) ==
-              0) {
+          if (pxe_buffer_write_u8(&writer, (u8)property->is_signed) == 0) {
             return NULL;
           }
 
           if (property->is_signed) {
-            if (pxe_buffer_push_length_string(&writer, property->signature,
-                                              property->signature_len,
-                                              arena) == 0) {
+            if (pxe_buffer_write_length_string(&writer, property->signature,
+                                               property->signature_len) == 0) {
               return NULL;
             }
           }
         }
 
-        if (pxe_buffer_push_varint(&writer, (i32)info->add.gamemode, arena) ==
-            0) {
+        if (pxe_buffer_write_varint(&writer, (i32)info->add.gamemode) == 0) {
           return NULL;
         }
 
-        if (pxe_buffer_push_varint(&writer, (i32)info->add.ping, arena) == 0) {
+        if (pxe_buffer_write_varint(&writer, (i32)info->add.ping) == 0) {
           return NULL;
         }
 
         u8 has_display_name = info->add.display_name_size > 0;
 
-        if (pxe_buffer_push_u8(&writer, (u8)has_display_name, arena) == 0) {
+        if (pxe_buffer_write_u8(&writer, (u8)has_display_name) == 0) {
           return NULL;
         }
 
         if (has_display_name) {
-          if (pxe_buffer_push_length_string(&writer, info->add.display_name,
-                                            info->add.display_name_size,
-                                            arena) == 0) {
+          if (pxe_buffer_write_length_string(&writer, info->add.display_name,
+                                             info->add.display_name_size) ==
+              0) {
             return NULL;
           }
         }
@@ -339,17 +325,13 @@ struct pxe_buffer* pxe_serialize_play_player_info(
     }
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_position_and_look(
-    struct pxe_memory_arena* arena, double x, double y, double z, float yaw,
-    float pitch, u8 flags, i32 teleport_id) {
-  size_t size = sizeof(double) + sizeof(double) + sizeof(double) +
-                sizeof(float) + sizeof(float) + sizeof(u8) +
-                pxe_varint_size(teleport_id);
-
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, size);
+struct pxe_buffer_chain* pxe_serialize_play_position_and_look(
+    struct pxe_pool* pool, double x, double y, double z, float yaw, float pitch,
+    u8 flags, i32 teleport_id) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
   if (!pxe_buffer_write_double(&writer, x)) {
     return NULL;
@@ -379,122 +361,125 @@ struct pxe_buffer* pxe_serialize_play_position_and_look(
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_destroy_entities(
-    struct pxe_memory_arena* arena, pxe_entity_id* entities, size_t count) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_destroy_entities(
+    struct pxe_pool* pool, pxe_entity_id* entities, size_t count) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  if (pxe_buffer_push_varint(&writer, (i32)count, arena) == 0) {
+  if (pxe_buffer_write_varint(&writer, (i32)count) == 0) {
     return NULL;
   }
 
   for (size_t i = 0; i < count; ++i) {
     pxe_entity_id eid = entities[i];
 
-    if (pxe_buffer_push_varint(&writer, eid, arena) == 0) {
+    if (pxe_buffer_write_varint(&writer, eid) == 0) {
       return NULL;
     }
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_respawn(struct pxe_memory_arena* arena,
-                                              i32 dimension,
-                                              pxe_gamemode gamemode,
-                                              char* level_type) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_respawn(struct pxe_pool* pool,
+                                                    i32 dimension,
+                                                    pxe_gamemode gamemode,
+                                                    char* level_type) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  pxe_buffer_push_u32(&writer, dimension, arena);
-  pxe_buffer_push_u8(&writer, (u8)gamemode, arena);
-  pxe_buffer_push_length_string(&writer, level_type, strlen(level_type), arena);
+  pxe_buffer_write_u32(&writer, dimension);
+  pxe_buffer_write_u8(&writer, (u8)gamemode);
+  pxe_buffer_write_length_string(&writer, level_type, strlen(level_type));
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_entity_head_look(
-    struct pxe_memory_arena* arena, pxe_entity_id eid, float yaw) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_entity_head_look(
+    struct pxe_pool* pool, pxe_entity_id eid, float yaw) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  if (pxe_buffer_push_varint(&writer, eid, arena) == 0) {
+  if (pxe_buffer_write_varint(&writer, eid) == 0) {
     return NULL;
   }
 
   u8 yaw_data = (u8)((yaw / 360.0f) * 256);
 
-  if (pxe_buffer_push_u8(&writer, yaw_data, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, yaw_data) == 0) {
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_update_health(
-    struct pxe_memory_arena* arena, float health, i32 food, float saturation) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_update_health(struct pxe_pool* pool,
+                                                          float health,
+                                                          i32 food,
+                                                          float saturation) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  if (pxe_buffer_push_float(&writer, health, arena) == 0) {
+  if (pxe_buffer_write_float(&writer, health) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_varint(&writer, food, arena) == 0) {
+  if (pxe_buffer_write_varint(&writer, food) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_float(&writer, saturation, arena) == 0) {
+  if (pxe_buffer_write_float(&writer, saturation) == 0) {
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_time_update(
-    struct pxe_memory_arena* arena, u64 world_age, u64 time) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_time_update(struct pxe_pool* pool,
+                                                        u64 world_age,
+                                                        u64 time) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  pxe_buffer_push_u64(&writer, world_age, arena);
-  pxe_buffer_push_u64(&writer, time, arena);
+  pxe_buffer_write_u64(&writer, world_age);
+  pxe_buffer_write_u64(&writer, time);
 
-  return writer.buffer;
+  return writer.head;
 }
 
-struct pxe_buffer* pxe_serialize_play_entity_teleport(
-    struct pxe_memory_arena* arena, pxe_entity_id eid, double x, double y,
-    double z, float yaw, float pitch, bool32 on_ground) {
-  pxe_buffer_writer writer = pxe_buffer_writer_create(arena, 0);
+struct pxe_buffer_chain* pxe_serialize_play_entity_teleport(
+    struct pxe_pool* pool, pxe_entity_id eid, double x, double y, double z,
+    float yaw, float pitch, bool32 on_ground) {
+  pxe_buffer_writer writer = pxe_buffer_writer_create(pool);
 
-  if (!pxe_buffer_push_varint(&writer, eid, arena)) {
+  if (!pxe_buffer_write_varint(&writer, eid)) {
     return NULL;
   }
 
-  if (!pxe_buffer_push_double(&writer, x, arena)) {
+  if (!pxe_buffer_write_double(&writer, x)) {
     return NULL;
   }
 
-  if (!pxe_buffer_push_double(&writer, y, arena)) {
+  if (!pxe_buffer_write_double(&writer, y)) {
     return NULL;
   }
 
-  if (!pxe_buffer_push_double(&writer, z, arena)) {
+  if (!pxe_buffer_write_double(&writer, z)) {
     return NULL;
   }
 
   u8 yaw_data = (u8)((yaw / 360.0f) * 256);
   u8 pitch_data = (u8)((pitch / 360.0f) * 256);
 
-  if (pxe_buffer_push_u8(&writer, yaw_data, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, yaw_data) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_u8(&writer, pitch_data, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, pitch_data) == 0) {
     return NULL;
   }
 
-  if (pxe_buffer_push_u8(&writer, (u8)on_ground, arena) == 0) {
+  if (pxe_buffer_write_u8(&writer, (u8)on_ground) == 0) {
     return NULL;
   }
 
-  return writer.buffer;
+  return writer.head;
 }

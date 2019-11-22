@@ -45,11 +45,14 @@ typedef struct pxe_session {
 
   bool32 on_ground;
 
-  pxe_buffer_chain_reader buffer_reader;
+  pxe_buffer_reader buffer_reader;
   // The chain of buffers that have been read and need to be fully processed.
-  struct pxe_buffer_chain* process_buffer_chain;
+  struct pxe_buffer_chain* read_buffer_chain;
   // Store the last buffer_chain so it's easy to append in order.
-  struct pxe_buffer_chain* last_buffer_chain;
+  struct pxe_buffer_chain* last_read_chain;
+
+  struct pxe_buffer_chain* write_buffer_chain;
+  struct pxe_buffer_chain* last_write_chain;
 } pxe_session;
 
 struct pxe_game_server;

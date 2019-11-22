@@ -63,15 +63,8 @@ pxe_uuid pxe_uuid_create_from_string(const char* str, bool32 dashes) {
 void pxe_uuid_to_string(pxe_uuid* uuid, char* str, bool32 dashes) {
   char temp[16];
 
-  pxe_buffer_writer writer;
-  pxe_buffer buffer;
-  buffer.data = (u8*)temp;
-  buffer.size = 16;
-  writer.buffer = &buffer;
-  writer.write_pos = 0;
-
-  pxe_buffer_write_u64(&writer, uuid->most_significant);
-  pxe_buffer_write_u64(&writer, uuid->least_significant);
+  *(u64*)(temp) = bswap_64(uuid->most_significant);
+  *(u64*)(temp + sizeof(u64)) = bswap_64(uuid->least_significant);
 
   size_t read_index = 0;
   size_t write_index = 0;

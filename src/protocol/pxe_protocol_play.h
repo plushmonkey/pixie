@@ -6,7 +6,8 @@
 #include "../pxe_session.h"
 #include "../pxe_uuid.h"
 
-struct pxe_buffer;
+struct pxe_buffer_chain;
+struct pxe_pool;
 
 typedef enum {
   PXE_ANIMATION_TYPE_SWING_MAIN = 0x00,
@@ -59,89 +60,89 @@ typedef enum {
 } pxe_change_game_state_reason;
 
 // 0x03
-struct pxe_buffer* pxe_serialize_play_chat(struct pxe_memory_arena* arena,
-                                           char* message, size_t message_size,
-                                           char* color);
+struct pxe_buffer_chain* pxe_serialize_play_chat(struct pxe_pool* pool,
+                                                 char* message,
+                                                 size_t message_size,
+                                                 char* color);
 
 // 0x05
-struct pxe_buffer* pxe_serialize_play_spawn_player(
-    struct pxe_memory_arena* arena, i32 eid, pxe_uuid* uuid, double x, double y,
+struct pxe_buffer_chain* pxe_serialize_play_spawn_player(
+    struct pxe_pool* pool, i32 eid, pxe_uuid* uuid, double x, double y,
     double z, float yaw, float pitch);
 
 // 0x06
-struct pxe_buffer* pxe_serialize_play_animation(struct pxe_memory_arena* arena,
-                                                i32 eid,
-                                                pxe_animation_type animation);
+struct pxe_buffer_chain* pxe_serialize_play_animation(
+    struct pxe_pool* pool, i32 eid, pxe_animation_type animation);
 
 // 0x18
-struct pxe_buffer* pxe_serialize_play_plugin_message(
-    struct pxe_memory_arena* arena, const char* channel, const u8* data,
-    size_t size);
+struct pxe_buffer_chain* pxe_serialize_play_plugin_message(
+    struct pxe_pool* pool, const char* channel, const u8* data, size_t size);
 
 // 0x1B
-struct pxe_buffer* pxe_serialize_play_entity_status(
-    struct pxe_memory_arena* arena, pxe_entity_id eid, u8 status);
+struct pxe_buffer_chain* pxe_serialize_play_entity_status(struct pxe_pool* pool,
+                                                          pxe_entity_id eid,
+                                                          u8 status);
 
 // 0x1E
-struct pxe_buffer* pxe_serialize_play_change_game_state(
-    struct pxe_memory_arena* arena, pxe_change_game_state_reason reason,
-    float value);
+struct pxe_buffer_chain* pxe_serialize_play_change_game_state(
+    struct pxe_pool* pool, pxe_change_game_state_reason reason, float value);
 
 // 0x20
-struct pxe_buffer* pxe_serialize_play_keep_alive(struct pxe_memory_arena* arena,
-                                                 i64 id);
+struct pxe_buffer_chain* pxe_serialize_play_keep_alive(struct pxe_pool* pool,
+                                                       i64 id);
 
 // 0x25
-struct pxe_buffer* pxe_serialize_play_join_game(struct pxe_memory_arena* arena,
-                                                i32 eid, u8 gamemode,
-                                                i32 dimension, char* level_type,
-                                                i32 view_distance,
-                                                bool32 reduced_debug);
+struct pxe_buffer_chain* pxe_serialize_play_join_game(
+    struct pxe_pool* pool, i32 eid, u8 gamemode, i32 dimension,
+    char* level_type, i32 view_distance, bool32 reduced_debug);
 
 // 0x29
-struct pxe_buffer* pxe_serialize_play_entity_look_and_relative_move(
-    struct pxe_memory_arena* arena, pxe_entity_id eid, double delta_x,
-    double delta_y, double delta_z, float yaw, float pitch, bool32 on_ground);
+struct pxe_buffer_chain* pxe_serialize_play_entity_look_and_relative_move(
+    struct pxe_pool* pool, pxe_entity_id eid, double delta_x, double delta_y,
+    double delta_z, float yaw, float pitch, bool32 on_ground);
 
 // 0x31
-struct pxe_buffer* pxe_serialize_play_player_abilities(
-    struct pxe_memory_arena* arena, u8 flags, float fly_speed, float fov);
+struct pxe_buffer_chain* pxe_serialize_play_player_abilities(
+    struct pxe_pool* pool, u8 flags, float fly_speed, float fov);
 
 // 0x33
-struct pxe_buffer* pxe_serialize_play_player_info(
-    struct pxe_memory_arena* arena, pxe_player_info_action action,
-    pxe_player_info* info, size_t info_count);
+struct pxe_buffer_chain* pxe_serialize_play_player_info(
+    struct pxe_pool* pool, pxe_player_info_action action, pxe_player_info* info,
+    size_t info_count);
 
 // 0x35
-struct pxe_buffer* pxe_serialize_play_position_and_look(
-    struct pxe_memory_arena* arena, double x, double y, double z, float yaw,
-    float pitch, u8 flags, i32 teleport_id);
+struct pxe_buffer_chain* pxe_serialize_play_position_and_look(
+    struct pxe_pool* pool, double x, double y, double z, float yaw, float pitch,
+    u8 flags, i32 teleport_id);
 
 // 0x37
-struct pxe_buffer* pxe_serialize_play_destroy_entities(
-    struct pxe_memory_arena* arena, pxe_entity_id* entities, size_t count);
+struct pxe_buffer_chain* pxe_serialize_play_destroy_entities(
+    struct pxe_pool* pool, pxe_entity_id* entities, size_t count);
 
 // 0x3A
-struct pxe_buffer* pxe_serialize_play_respawn(struct pxe_memory_arena* arena,
-                                              i32 dimension,
-                                              pxe_gamemode gamemode,
-                                              char* level_type);
+struct pxe_buffer_chain* pxe_serialize_play_respawn(struct pxe_pool* pool,
+                                                    i32 dimension,
+                                                    pxe_gamemode gamemode,
+                                                    char* level_type);
 
 // 0x3B
-struct pxe_buffer* pxe_serialize_play_entity_head_look(
-    struct pxe_memory_arena* arena, pxe_entity_id eid, float yaw);
+struct pxe_buffer_chain* pxe_serialize_play_entity_head_look(
+    struct pxe_pool* pool, pxe_entity_id eid, float yaw);
 
 // 0x48
-struct pxe_buffer* pxe_serialize_play_update_health(
-    struct pxe_memory_arena* arena, float health, i32 food, float saturation);
+struct pxe_buffer_chain* pxe_serialize_play_update_health(struct pxe_pool* pool,
+                                                          float health,
+                                                          i32 food,
+                                                          float saturation);
 
 // 0x4E
-struct pxe_buffer* pxe_serialize_play_time_update(
-    struct pxe_memory_arena* arena, u64 world_age, u64 time);
+struct pxe_buffer_chain* pxe_serialize_play_time_update(struct pxe_pool* pool,
+                                                        u64 world_age,
+                                                        u64 time);
 
 // 0x56
-struct pxe_buffer* pxe_serialize_play_entity_teleport(
-    struct pxe_memory_arena* arena, pxe_entity_id eid, double x, double y,
-    double z, float yaw, float pitch, bool32 on_ground);
+struct pxe_buffer_chain* pxe_serialize_play_entity_teleport(
+    struct pxe_pool* pool, pxe_entity_id eid, double x, double y, double z,
+    float yaw, float pitch, bool32 on_ground);
 
 #endif

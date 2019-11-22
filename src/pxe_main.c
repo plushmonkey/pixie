@@ -31,11 +31,11 @@ int main(int argc, char* argv[]) {
   }
 #endif
 
-  size_t trans_size = pxe_megabytes(32);
+  size_t trans_size = pxe_megabytes(16);
   void* trans_memory = calloc(1, trans_size);
   pxe_memory_arena trans_arena;
 
-  size_t perm_size = pxe_megabytes(32);
+  size_t perm_size = pxe_megabytes(2);
   void* perm_memory = calloc(1, perm_size);
   pxe_memory_arena perm_arena;
 
