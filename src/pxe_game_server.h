@@ -30,6 +30,7 @@ typedef struct pxe_game_server {
   u64 world_time;
 
   pxe_pool* write_pool;
+  pxe_pool* write_chain_pool;
   pxe_pool* read_pool;
 } pxe_game_server;
 

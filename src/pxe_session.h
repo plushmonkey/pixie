@@ -16,6 +16,15 @@ typedef enum {
   PXE_GAMEMODE_COUNT
 } pxe_gamemode;
 
+#define PXE_MAX_OUTBOUND 64
+
+typedef struct pxe_write_chain {
+  pxe_buffer_chain* chain;
+  struct pxe_write_chain* next;
+
+  void* owner;
+} pxe_write_chain;
+
 typedef struct pxe_session {
   pxe_protocol_state protocol_state;
   pxe_socket socket;
@@ -51,8 +60,10 @@ typedef struct pxe_session {
   // Store the last buffer_chain so it's easy to append in order.
   struct pxe_buffer_chain* last_read_chain;
 
-  struct pxe_buffer_chain* write_buffer_chain;
-  struct pxe_buffer_chain* last_write_chain;
+  struct pxe_write_chain* write_buffer_chain;
+  struct pxe_write_chain* last_write_chain;
+
+  struct pxe_pool* write_chain_pool;
 } pxe_session;
 
 struct pxe_game_server;

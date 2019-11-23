@@ -198,7 +198,19 @@ size_t pxe_socket_send_chain(pxe_socket* socket, struct pxe_memory_arena* arena,
   if (WSASend(socket->fd, wsa_buffers, (DWORD)num_buffers, (DWORD*)&sent, 0,
               NULL, NULL) != 0) {
     int err = pxe_get_error_code();
-    fprintf(stderr, "Error using WSASend: %d\n", err);
+
+    if (err == PXE_WOULDBLOCK) {
+      return 0;
+    }
+
+    if (err != WSAECONNRESET && err != WSAECONNABORTED) {
+      fprintf(stderr, "Error using WSASend: %d\n", err);
+    }
+
+    pxe_socket_disconnect(socket);
+
+    socket->error_code = err;
+    socket->state = PXE_SOCKET_STATE_ERROR;
   }
 
   return sent;

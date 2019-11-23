@@ -533,6 +533,12 @@ bool32 pxe_buffer_write_u8(pxe_buffer_writer* writer, u8 data) {
 
   pxe_buffer* buffer = writer->current->buffer;
 
+  if (!pxe_buffer_writer_available(writer, 1)) {
+    writer->current = writer->current->next;
+    buffer = writer->current->buffer;
+    writer->relative_write_pos = 0;
+  }
+
   buffer->data[writer->relative_write_pos++] = data;
   buffer->size++;
 

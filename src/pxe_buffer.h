@@ -16,6 +16,11 @@ typedef struct pxe_buffer {
 typedef struct pxe_buffer_chain {
   pxe_buffer* buffer;
   struct pxe_buffer_chain* next;
+
+  bool32 reference_counted;
+  i32 reference_count;
+
+  bool32 was_free;
 } pxe_buffer_chain;
 
 typedef struct pxe_buffer_reader {
@@ -30,10 +35,6 @@ typedef struct pxe_buffer_writer {
   size_t relative_write_pos;
   pxe_pool* pool;
 } pxe_buffer_writer;
-
-pxe_buffer_chain* pxe_chain_insert(struct pxe_memory_arena* arena,
-                                   pxe_buffer_chain* chain, u8* data,
-                                   size_t size);
 
 size_t pxe_buffer_size(pxe_buffer_chain* chain);
 

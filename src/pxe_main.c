@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
   void* trans_memory = calloc(1, trans_size);
   pxe_memory_arena trans_arena;
 
-  size_t perm_size = pxe_megabytes(32);
+  size_t perm_size = pxe_megabytes(256);
   void* perm_memory = calloc(1, perm_size);
   pxe_memory_arena perm_arena;
 

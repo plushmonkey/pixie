@@ -66,6 +66,10 @@ struct pxe_buffer_chain* pxe_pool_alloc(pxe_pool* pool) {
     chain->buffer = buffer;
     chain->next = NULL;
 
+    chain->reference_counted = 0;
+    chain->reference_count = 0;
+    chain->was_free = 0;
+
     ++pool->allocated_count;
 
     return chain;
@@ -77,6 +81,8 @@ struct pxe_buffer_chain* pxe_pool_alloc(pxe_pool* pool) {
   free->next = NULL;
 
   free->buffer->size = 0;
+  free->reference_count = 0;
+  free->reference_counted = 0;
 
   return free;
 }
@@ -84,11 +90,25 @@ struct pxe_buffer_chain* pxe_pool_alloc(pxe_pool* pool) {
 struct pxe_buffer_chain* pxe_pool_free(pxe_pool* pool,
                                        struct pxe_buffer_chain* chain,
                                        bool32 free_chain) {
+  if (chain == NULL) return NULL;
+
+  assert(chain->buffer->max_size == pool->element_size);
+  assert(chain->buffer->size <= pool->element_size);
+
   if (!free_chain) {
+    if (chain->reference_counted && chain->reference_count > 1) {
+      --chain->reference_count;
+      return NULL;
+    }
+
     pxe_buffer_chain* next = chain->next;
 
     chain->next = pool->free;
     pool->free = chain;
+    chain->was_free = 1;
+
+    assert(chain->buffer->max_size == pool->element_size);
+    assert(chain->buffer->size <= pool->element_size);
 
     return next;
   }
@@ -96,8 +116,16 @@ struct pxe_buffer_chain* pxe_pool_free(pxe_pool* pool,
   while (chain) {
     pxe_buffer_chain* next = chain->next;
 
-    chain->next = pool->free;
-    pool->free = chain;
+    if (chain->reference_counted && chain->reference_count > 1) {
+      --chain->reference_count;
+    } else {
+      chain->next = pool->free;
+      pool->free = chain;
+      chain->was_free = 1;
+    }
+
+    assert(chain->buffer->max_size == pool->element_size);
+    assert(chain->buffer->size <= pool->element_size);
 
     chain = next;
   }
